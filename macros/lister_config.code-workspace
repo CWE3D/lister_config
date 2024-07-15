@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../../lister_theme"
+		},
+		{
+			"path": "../../lister"
 		}
 	],
 	"settings": {}
