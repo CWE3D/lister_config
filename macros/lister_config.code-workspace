@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../../lister"
+		},
+		{
+			"path": "../../lister_resources"
 		}
 	],
 	"settings": {}
