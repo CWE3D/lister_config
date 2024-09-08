@@ -3,7 +3,25 @@
 # Make this script executable
 chmod +x "$0"
 
-REPO_PATH="$HOME/printer_data/gcodes/lister_printables"
+# Function to display usage information
+usage() {
+    echo "Usage: $0 <directory>"
+    echo "Extract thumbnails from gcode files in the specified directory and its subdirectories."
+    exit 1
+}
+
+# Check if a directory argument is provided
+if [ $# -ne 1 ]; then
+    usage
+fi
+
+REPO_PATH="$1"
+
+# Check if the provided path is a directory
+if [ ! -d "$REPO_PATH" ]; then
+    echo "Error: '$REPO_PATH' is not a valid directory."
+    usage
+fi
 
 # Function to extract and decode base64 data
 decode_base64() {
