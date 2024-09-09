@@ -3,7 +3,6 @@
 import logging
 import asyncio
 import os
-import aiohttp
 from moonraker import MoonrakerRouter
 from moonraker.server import ServerComponent
 
@@ -12,6 +11,7 @@ class ListerMetadataScanPlugin(ServerComponent):
     def __init__(self, config):
         self.server = config.get_server()
         self.file_manager = self.server.lookup_component('file_manager')
+        self.gcode_metadata = self.file_manager.get_metadata_storage()
         self.lister_printables_path = 'lister_printables'
         self.server.register_event_handler(
             "server:klippy_ready", self.handle_server_ready)
@@ -30,40 +30,44 @@ class ListerMetadataScanPlugin(ServerComponent):
                 logging.info(f"Directory {full_path} does not exist. Skipping metadata scan.")
                 return
 
-            gcode_files = []
-            for root, dirs, files in os.walk(full_path):
-                if '.thumbs' in dirs:
-                    dirs.remove('.thumbs')  # don't visit .thumbs directories
-                for file in files:
-                    if file.lower().endswith(('.gcode', '.g', '.gco')):
-                        rel_path = os.path.relpath(os.path.join(root, file), root_dir)
-                        gcode_files.append(rel_path)
-
-            await self.scan_files(gcode_files)
+            for file_path in self.walk_directory(full_path):
+                if file_path.lower().endswith(('.gcode', '.g', '.gco')):
+                    rel_path = os.path.relpath(file_path, root_dir)
+                    await self.scan_file_metadata(rel_path)
 
             logging.info("Lister initial metadata scan completed.")
             await self.server.send_event("lister_metadata_scan:scan_complete")
         except Exception as e:
             logging.exception(f"Error during Lister metadata scan: {str(e)}")
 
-    async def scan_files(self, files):
-        async with aiohttp.ClientSession() as session:
-            tasks = []
+    def walk_directory(self, directory):
+        for root, dirs, files in os.walk(directory):
+            if '.thumbs' in dirs:
+                dirs.remove('.thumbs')  # don't visit .thumbs directories
             for file in files:
-                task = asyncio.create_task(self.scan_file(session, file))
-                tasks.append(task)
-            await asyncio.gather(*tasks)
+                yield os.path.join(root, file)
 
-    async def scan_file(self, session, file_path):
-        url = f"http://localhost/server/files/metascan?filename={file_path}"
+    async def scan_file_metadata(self, rel_path: str):
         try:
-            async with session.get(url) as response:
-                if response.status == 200:
-                    logging.info(f"Successfully scanned metadata for {file_path}")
-                else:
-                    logging.warning(f"Failed to scan metadata for {file_path}. Status: {response.status}")
+            logging.info(f"Scanning metadata for {rel_path}")
+
+            full_path = os.path.join(self.file_manager.get_directory('gcodes'), rel_path)
+
+            # Force a rescan
+            self.gcode_metadata.remove_file_metadata(rel_path)
+
+            path_info = self.file_manager.get_path_info(full_path, "gcodes")
+            evt = self.gcode_metadata.parse_metadata(rel_path, path_info)
+            await evt.wait()
+
+            # Verify metadata was parsed successfully
+            metadata = self.gcode_metadata.get(rel_path)
+            if metadata:
+                logging.info(f"Successfully scanned metadata for {rel_path}")
+            else:
+                logging.warning(f"Failed to parse metadata for file '{rel_path}'")
         except Exception as e:
-            logging.error(f"Error scanning metadata for {file_path}: {str(e)}")
+            logging.exception(f"Error scanning metadata for {rel_path}: {str(e)}")
 
     async def on_server_initialized(self, server):
         self.server.register_notification(
