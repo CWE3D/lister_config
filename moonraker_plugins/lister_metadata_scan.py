@@ -64,6 +64,5 @@ class ListerMetadataScanPlugin(ServerComponent):
         self.server.register_notification(
             "lister_metadata_scan:scan_complete", "Status of the Lister Metadata Scan")
 
-
 def load_component(config):
     return ListerMetadataScanPlugin(config)
