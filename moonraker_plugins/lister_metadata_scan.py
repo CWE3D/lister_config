@@ -48,11 +48,8 @@ class ListerMetadataScanPlugin(ServerComponent):
             try:
                 logging.info(f"Scanning metadata for {rel_path}")
 
-                # Check if metadata already exists and is valid
-                existing_metadata = self.gcode_metadata.get(rel_path)
-                if existing_metadata and self.is_metadata_valid(existing_metadata):
-                    logging.info(f"Valid metadata already exists for {rel_path}")
-                    return
+                # Force a rescan by removing existing metadata
+                self.gcode_metadata.remove_file_metadata(rel_path)
 
                 # Get path info and parse metadata
                 full_path = os.path.join(self.file_manager.get_directory('gcodes'), rel_path)
@@ -64,14 +61,42 @@ class ListerMetadataScanPlugin(ServerComponent):
                 metadata = self.gcode_metadata.get(rel_path)
                 if metadata:
                     logging.info(f"Successfully scanned metadata for {rel_path}")
+                    # Ensure thumbnails are generated
+                    await self.generate_thumbnails(rel_path, metadata)
                 else:
                     logging.warning(f"Failed to parse metadata for file '{rel_path}'")
             except Exception as e:
                 logging.exception(f"Error scanning metadata for {rel_path}: {str(e)}")
 
-    def is_metadata_valid(self, metadata):
-        # Add your own validation logic here
-        return 'thumbnails' in metadata and metadata['thumbnails']
+    async def generate_thumbnails(self, rel_path: str, metadata: dict):
+        if 'thumbnails' not in metadata or not metadata['thumbnails']:
+            logging.warning(f"No thumbnail data found for {rel_path}")
+            return
+
+        root_dir = self.file_manager.get_directory('gcodes')
+        file_dir = os.path.dirname(os.path.join(root_dir, rel_path))
+        thumbs_dir = os.path.join(file_dir, '.thumbs')
+
+        if not os.path.exists(thumbs_dir):
+            os.makedirs(thumbs_dir)
+
+        for thumb in metadata['thumbnails']:
+            if 'relative_path' in thumb:
+                thumb_path = os.path.join(file_dir, thumb['relative_path'])
+                if not os.path.exists(thumb_path):
+                    logging.warning(f"Thumbnail file not found: {thumb_path}")
+                    continue
+
+                # Copy or move the thumbnail to the .thumbs directory
+                new_thumb_path = os.path.join(thumbs_dir, os.path.basename(thumb_path))
+                if not os.path.exists(new_thumb_path):
+                    await self.server.event_loop.run_in_thread(
+                        self._copy_file, thumb_path, new_thumb_path)
+                    logging.info(f"Generated thumbnail: {new_thumb_path}")
+
+    def _copy_file(self, src, dst):
+        import shutil
+        shutil.copy2(src, dst)
 
     async def on_server_initialized(self, server):
         self.server.register_notification(
