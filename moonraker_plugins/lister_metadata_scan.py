@@ -1,13 +1,16 @@
-from moonraker.components.base_component import BaseComponent
-from moonraker.confighelper import ConfigHelper
+# Lister Metadata Scan Component
+#
+# Copyright (C) 2023 Your Name <your.email@example.com>
+#
+# This file may be distributed under the terms of the GNU GPLv3 license.
+
 import logging
 import asyncio
 import os
 
 
-class ListerMetadataScanPlugin(BaseComponent):
-    def __init__(self, config: ConfigHelper):
-        super().__init__(config)
+class ListerMetadataScan:
+    def __init__(self, config):
         self.server = config.get_server()
         self.file_manager = self.server.lookup_component('file_manager')
         self.gcode_metadata = self.file_manager.get_metadata_storage()
@@ -69,5 +72,5 @@ class ListerMetadataScanPlugin(BaseComponent):
             logging.exception(f"Error scanning metadata for {rel_path}: {str(e)}")
 
 
-def load_component(config: ConfigHelper):
-    return ListerMetadataScanPlugin(config)
+def load_component(config):
+    return ListerMetadataScan(config)
