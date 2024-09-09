@@ -1,14 +1,13 @@
-# lister_metadata_scan.py
-
+from moonraker.components.base_component import BaseComponent
+from moonraker.confighelper import ConfigHelper
 import logging
 import asyncio
 import os
-from moonraker import MoonrakerRouter
-from moonraker.server import ServerComponent
 
 
-class ListerMetadataScanPlugin(ServerComponent):
-    def __init__(self, config):
+class ListerMetadataScanPlugin(BaseComponent):
+    def __init__(self, config: ConfigHelper):
+        super().__init__(config)
         self.server = config.get_server()
         self.file_manager = self.server.lookup_component('file_manager')
         self.gcode_metadata = self.file_manager.get_metadata_storage()
@@ -69,10 +68,6 @@ class ListerMetadataScanPlugin(ServerComponent):
         except Exception as e:
             logging.exception(f"Error scanning metadata for {rel_path}: {str(e)}")
 
-    async def on_server_initialized(self, server):
-        self.server.register_notification(
-            "lister_metadata_scan:scan_complete", "Status of the Lister Metadata Scan")
 
-
-def load_component(config):
+def load_component(config: ConfigHelper):
     return ListerMetadataScanPlugin(config)
