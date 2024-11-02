@@ -1,0 +1,2 @@
+# Required for input device handling
+evdev>=1.4.0
