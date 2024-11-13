@@ -65,9 +65,9 @@ check_repository() {
     local name=$1
     local repo_info=${REPOS[$name]}
 
-    # Split into url and directory
-    IFS=':' read -r repo_url repo_dir <<< "$repo_info"
-    unset IFS
+    # Use the same URL parsing as install.sh
+    local repo_url=${repo_info%:*}
+    local repo_dir=${repo_info##*:}
 
     log_message "INFO" "Checking repository: $name"
     log_message "INFO" "Directory: $repo_dir"
@@ -90,6 +90,10 @@ check_repository() {
         return 1
     }
 
+    # Fix permissions after git operations
+    chown -R pi:pi "$repo_dir"
+    chmod -R 755 "$repo_dir"
+
     # Check if there were updates
     local new_head=$(cd "$repo_dir" && git rev-parse HEAD)
     if [ "$original_head" != "$new_head" ]; then
@@ -110,9 +114,16 @@ check_repository() {
             chmod +x "$install_script"
             if $install_script; then
                 REPO_STATUS[$name]="UPDATED"
+                # Fix permissions after install script
+                log_message "INFO" "Fixing permissions after install script"
+                chown -R pi:pi "$repo_dir"
+                chmod -R 755 "$repo_dir"
             else
                 REPO_STATUS[$name]="INSTALL_FAILED"
                 log_message "ERROR" "Install script failed for $name"
+                # Fix permissions even if install failed
+                chown -R pi:pi "$repo_dir"
+                chmod -R 755 "$repo_dir"
                 return 1
             fi
         else
@@ -167,19 +178,27 @@ check_services() {
 
 # Function to fix permissions
 fix_permissions() {
-    log_message "INFO" "Checking and fixing permissions"
+    log_message "INFO" "Running final permission check for all components"
 
     for repo_info in "${REPOS[@]}"; do
-        IFS=':' read -r _ repo_dir <<< "$repo_info"
-        unset IFS
-
+        local repo_dir=${repo_info##*:}
         if [ -d "$repo_dir" ]; then
-            log_message "INFO" "Setting permissions for $repo_dir"
+            log_message "INFO" "Final permission check for $repo_dir"
+            # Fix owner and group recursively
             chown -R pi:pi "$repo_dir"
-            chmod -R 755 "$repo_dir"
+            # Fix directory permissions
+            find "$repo_dir" -type d -exec chmod 755 {} \;
+            # Fix file permissions
+            find "$repo_dir" -type f -exec chmod 644 {} \;
+            # Make shell scripts executable
             find "$repo_dir" -type f -name "*.sh" -exec chmod +x {} \;
         fi
     done
+
+    # Fix config and log directories
+    log_message "INFO" "Fixing permissions for config and log directories"
+    chown -R pi:pi "$CONFIG_DIR" "$LOG_DIR"
+    chmod -R 755 "$CONFIG_DIR" "$LOG_DIR"
 }
 
 # Function to print status report
