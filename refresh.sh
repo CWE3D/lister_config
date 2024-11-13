@@ -64,8 +64,9 @@ check_root() {
 check_repository() {
     local name=$1
     local repo_info=${REPOS[$name]}
-    local repo_dir=$(echo $repo_info | cut -d':' -f2)
-    local branch=$(echo $repo_info | cut -d':' -f3)
+
+    # Properly split the repository info using : as delimiter
+    IFS=':' read -r repo_url repo_dir branch <<< "$repo_info"
 
     if [ ! -d "$repo_dir/.git" ]; then
         REPO_STATUS[$name]="MISSING"

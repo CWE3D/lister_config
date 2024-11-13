@@ -82,14 +82,15 @@ create_directories() {
 
 # Function to clone or update a repository
 handle_repository() {
-    local name=$1
+       local name=$1
     local repo_info=${REPOS[$name]}
-    local repo_url=${repo_info%:*:*}
-    local repo_dir=$(echo $repo_info | cut -d':' -f2)
-    local branch=$(echo $repo_info | cut -d':' -f3)
-    local retry_count=0
+
+    # Properly split the repository info using : as delimiter
+    IFS=':' read -r repo_url repo_dir branch <<< "$repo_info"
 
     log_message "INFO" "Processing repository: $name (branch: $branch)"
+
+    local retry_count=0
 
     while [ $retry_count -lt $RETRY_LIMIT ]; do
         if [ -d "$repo_dir" ]; then
