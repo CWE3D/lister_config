@@ -109,7 +109,12 @@ handle_repository() {
                  git fetch origin && \
                  git checkout -f main && \
                  git reset --hard origin/main && \
-                 git pull origin main) && return 0
+                 git pull origin main) && {
+                    # Fix permissions after successful update
+                    chown -R pi:pi "$repo_dir"
+                    chmod -R 755 "$repo_dir"
+                    return 0
+                }
             fi
 
             log_message "WARNING" "Update failed, removing directory and trying fresh clone"
@@ -118,6 +123,9 @@ handle_repository() {
 
         log_message "INFO" "Cloning repository: $repo_url to $repo_dir"
         if git clone "$repo_url" "$repo_dir"; then
+            # Fix permissions after successful clone
+            chown -R pi:pi "$repo_dir"
+            chmod -R 755 "$repo_dir"
             break
         fi
 
@@ -132,6 +140,43 @@ handle_repository() {
             return 1
         fi
     done
+
+    # Make install script executable if it exists
+    local install_script="$repo_dir/install.sh"
+    if [ -f "$install_script" ]; then
+        chmod +x "$install_script"
+        log_message "INFO" "Running install script for $name"
+        if $install_script; then
+            INSTALL_STATUS[$name]="SUCCESS"
+            # Fix permissions again after install script runs
+            log_message "INFO" "Fixing permissions after install script"
+            chown -R pi:pi "$repo_dir"
+            chmod -R 755 "$repo_dir"
+        else
+            INSTALL_STATUS[$name]="FAILED_INSTALL"
+            log_message "ERROR" "Installation failed for $name"
+            # Fix permissions even if install failed
+            chown -R pi:pi "$repo_dir"
+            chmod -R 755 "$repo_dir"
+            return 1
+        fi
+    else
+        INSTALL_STATUS[$name]="NO_INSTALL_SCRIPT"
+        log_message "WARNING" "No install script found for $name"
+    fi
+
+    # Check for requirements.txt and install if present
+    local req_file="$repo_dir/requirements.txt"
+    if [ -f "$req_file" ]; then
+        log_message "INFO" "Installing Python requirements for $name"
+        if ! pip3 install -r "$req_file"; then
+            log_message "ERROR" "Failed to install Python requirements for $name"
+            INSTALL_STATUS[$name]="FAILED_REQUIREMENTS"
+            return 1
+        fi
+    fi
+
+    return 0
 }
 
 # Function to check service status
@@ -165,22 +210,25 @@ check_services() {
 
 # Function to fix permissions
 fix_permissions() {
-    log_message "INFO" "Fixing permissions for all installed components"
+    log_message "INFO" "Running final permission check for all components"
 
-    # Fix ownership for all repository directories
     for repo_info in "${REPOS[@]}"; do
-        local dir=$(echo $repo_info | cut -d':' -f2)
-        if [ -d "$dir" ]; then
-            log_message "INFO" "Setting permissions for $dir"
-            chown -R pi:pi "$dir"
-            chmod -R 755 "$dir"
-
-            # Make all .sh files executable
-            find "$dir" -type f -name "*.sh" -exec chmod +x {} \;
+        local repo_dir=${repo_info##*:}
+        if [ -d "$repo_dir" ]; then
+            log_message "INFO" "Final permission check for $repo_dir"
+            # Fix owner and group recursively
+            chown -R pi:pi "$repo_dir"
+            # Fix directory permissions
+            find "$repo_dir" -type d -exec chmod 755 {} \;
+            # Fix file permissions
+            find "$repo_dir" -type f -exec chmod 644 {} \;
+            # Make shell scripts executable
+            find "$repo_dir" -type f -name "*.sh" -exec chmod +x {} \;
         fi
     done
 
-    # Fix permissions for config and log directories
+    # Fix config and log directories
+    log_message "INFO" "Fixing permissions for config and log directories"
     chown -R pi:pi "$CONFIG_DIR" "$LOG_DIR"
     chmod -R 755 "$CONFIG_DIR" "$LOG_DIR"
 }
