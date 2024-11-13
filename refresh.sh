@@ -7,11 +7,11 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Define repository information
-# Format: "repo_url:install_dir:branch"
+# Format: "repo_url:install_dir"
 declare -A REPOS=(
-    ["lister_numpad_macros"]="https://github.com/CWE3D/lister_numpad_macros.git:/home/pi/lister_numpad_macros:main"
-    ["lister_sound_system"]="https://github.com/CWE3D/lister_sound_system.git:/home/pi/lister_sound_system:main"
-    ["lister_printables"]="https://github.com/CWE3D/lister_printables.git:/home/pi/printer_data/gcodes/lister_printables:main"
+    ["lister_numpad_macros"]="https://github.com/CWE3D/lister_numpad_macros.git:/home/pi/lister_numpad_macros"
+    ["lister_sound_system"]="https://github.com/CWE3D/lister_sound_system.git:/home/pi/lister_sound_system"
+    ["lister_printables"]="https://github.com/CWE3D/lister_printables.git:/home/pi/printer_data/gcodes/lister_printables"
 )
 
 # Define paths
@@ -65,8 +65,12 @@ check_repository() {
     local name=$1
     local repo_info=${REPOS[$name]}
 
-    # Properly split the repository info using : as delimiter
-    IFS=':' read -r repo_url repo_dir branch <<< "$repo_info"
+    # Split into url and directory
+    IFS=':' read -r repo_url repo_dir <<< "$repo_info"
+    unset IFS
+
+    log_message "INFO" "Checking repository: $name"
+    log_message "INFO" "Directory: $repo_dir"
 
     if [ ! -d "$repo_dir/.git" ]; then
         REPO_STATUS[$name]="MISSING"
@@ -79,8 +83,8 @@ check_repository() {
 
     # Fetch updates
     (cd "$repo_dir" && \
-     git fetch origin "$branch" && \
-     git reset --hard "origin/$branch") || {
+     git fetch origin && \
+     git reset --hard "origin/main") || {
         REPO_STATUS[$name]="FETCH_FAILED"
         log_message "ERROR" "Failed to fetch updates for $name"
         return 1
@@ -166,12 +170,14 @@ fix_permissions() {
     log_message "INFO" "Checking and fixing permissions"
 
     for repo_info in "${REPOS[@]}"; do
-        local dir=$(echo $repo_info | cut -d':' -f2)
-        if [ -d "$dir" ]; then
-            log_message "INFO" "Setting permissions for $dir"
-            chown -R pi:pi "$dir"
-            chmod -R 755 "$dir"
-            find "$dir" -type f -name "*.sh" -exec chmod +x {} \;
+        IFS=':' read -r _ repo_dir <<< "$repo_info"
+        unset IFS
+
+        if [ -d "$repo_dir" ]; then
+            log_message "INFO" "Setting permissions for $repo_dir"
+            chown -R pi:pi "$repo_dir"
+            chmod -R 755 "$repo_dir"
+            find "$repo_dir" -type f -name "*.sh" -exec chmod +x {} \;
         fi
     done
 }

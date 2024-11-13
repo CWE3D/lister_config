@@ -9,10 +9,12 @@ NC='\033[0m' # No Color
 
 # Define repository information
 # Format: "repo_url:install_dir:branch"
+# Define repository information
+# Format: "repo_url:install_dir"
 declare -A REPOS=(
-    ["lister_numpad_macros"]="https://github.com/CWE3D/lister_numpad_macros.git:/home/pi/lister_numpad_macros:main"
-    ["lister_sound_system"]="https://github.com/CWE3D/lister_sound_system.git:/home/pi/lister_sound_system:main"
-    ["lister_printables"]="https://github.com/CWE3D/lister_printables.git:/home/pi/printer_data/gcodes/lister_printables:main"
+    ["lister_numpad_macros"]="https://github.com/CWE3D/lister_numpad_macros.git:/home/pi/lister_numpad_macros"
+    ["lister_sound_system"]="https://github.com/CWE3D/lister_sound_system.git:/home/pi/lister_sound_system"
+    ["lister_printables"]="https://github.com/CWE3D/lister_printables.git:/home/pi/printer_data/gcodes/lister_printables"
 )
 
 # Define paths
@@ -82,14 +84,18 @@ create_directories() {
 }
 
 # Function to clone or update a repository
+# Function to clone or update a repository
 handle_repository() {
-       local name=$1
+    local name=$1
     local repo_info=${REPOS[$name]}
 
-    # Properly split the repository info using : as delimiter
-    IFS=':' read -r repo_url repo_dir branch <<< "$repo_info"
+    # Split into url and directory
+    IFS=':' read -r repo_url repo_dir <<< "$repo_info"
+    unset IFS
 
-    log_message "INFO" "Processing repository: $name (branch: $branch)"
+    log_message "INFO" "Processing repository: $name"
+    log_message "INFO" "URL: $repo_url"
+    log_message "INFO" "Directory: $repo_dir"
 
     local retry_count=0
 
@@ -101,19 +107,17 @@ handle_repository() {
                  git reset --hard && \
                  git clean -fd && \
                  git fetch origin && \
-                 git checkout -f "$branch" && \
-                 git reset --hard "origin/$branch" && \
-                 git pull origin "$branch") && return 0
+                 git checkout -f main && \
+                 git reset --hard origin/main && \
+                 git pull origin main) && return 0
             fi
 
-            # If update fails, remove directory and try fresh clone
             log_message "WARNING" "Update failed, removing directory and trying fresh clone"
             rm -rf "$repo_dir"
         fi
 
-        # Fresh clone
-        log_message "INFO" "Cloning repository: $repo_url (branch: $branch)"
-        if git clone -b "$branch" "$repo_url" "$repo_dir"; then
+        log_message "INFO" "Cloning repository: $repo_url to $repo_dir"
+        if git clone "$repo_url" "$repo_dir"; then
             break
         fi
 
