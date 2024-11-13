@@ -89,9 +89,9 @@ handle_repository() {
     local name=$1
     local repo_info=${REPOS[$name]}
 
-    # Split into url and directory
-    IFS=':' read -r repo_url repo_dir <<< "$repo_info"
-    unset IFS
+    # Find the last occurrence of ".git:" to properly split URL and directory
+    local repo_url=${repo_info%:*}
+    local repo_dir=${repo_info##*:}
 
     log_message "INFO" "Processing repository: $name"
     log_message "INFO" "URL: $repo_url"
@@ -132,40 +132,6 @@ handle_repository() {
             return 1
         fi
     done
-
-    # Set correct ownership and permissions
-    chown -R pi:pi "$repo_dir"
-    chmod -R 755 "$repo_dir"
-
-    # Make install script executable if it exists
-    local install_script="$repo_dir/install.sh"
-    if [ -f "$install_script" ]; then
-        chmod +x "$install_script"
-        log_message "INFO" "Running install script for $name"
-        if $install_script; then
-            INSTALL_STATUS[$name]="SUCCESS"
-        else
-            INSTALL_STATUS[$name]="FAILED_INSTALL"
-            log_message "ERROR" "Installation failed for $name"
-            return 1
-        fi
-    else
-        INSTALL_STATUS[$name]="NO_INSTALL_SCRIPT"
-        log_message "WARNING" "No install script found for $name"
-    fi
-
-    # Check for requirements.txt and install if present
-    local req_file="$repo_dir/requirements.txt"
-    if [ -f "$req_file" ]; then
-        log_message "INFO" "Installing Python requirements for $name"
-        if ! pip3 install -r "$req_file"; then
-            log_message "ERROR" "Failed to install Python requirements for $name"
-            INSTALL_STATUS[$name]="FAILED_REQUIREMENTS"
-            return 1
-        fi
-    fi
-
-    return 0
 }
 
 # Function to check service status
