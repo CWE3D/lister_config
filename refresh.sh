@@ -81,10 +81,13 @@ check_repository() {
     # Store original HEAD
     local original_head=$(cd "$repo_dir" && git rev-parse HEAD)
 
-    # Fetch updates
+    # Fetch updates and force overwrite
     (cd "$repo_dir" && \
+     git reset --hard && \
+     git clean -fd && \
      git fetch origin && \
-     git reset --hard "origin/main") || {
+     git checkout -f main && \
+     git reset --hard origin/main) || {
         REPO_STATUS[$name]="FETCH_FAILED"
         log_message "ERROR" "Failed to fetch updates for $name"
         return 1

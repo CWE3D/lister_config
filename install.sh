@@ -108,8 +108,7 @@ handle_repository() {
                  git clean -fd && \
                  git fetch origin && \
                  git checkout -f main && \
-                 git reset --hard origin/main && \
-                 git pull origin main) && {
+                 git reset --hard origin/main) && {
                     # Fix permissions after successful update
                     chown -R pi:pi "$repo_dir"
                     chmod -R 755 "$repo_dir"
