@@ -100,6 +100,20 @@ check_repository() {
         UPDATE_STATUS[$name]="UPDATED"
         log_message "INFO" "Repository $name updated"
 
+        # Check for and run refresh script if it exists
+        local refresh_script="$repo_dir/refresh.sh"
+        if [ -f "$refresh_script" ]; then
+            log_message "INFO" "Running refresh script for $name"
+            chmod +x "$refresh_script"
+            if $refresh_script; then
+                log_message "INFO" "Refresh script completed successfully for $name"
+            else
+                REPO_STATUS[$name]="REFRESH_FAILED"
+                log_message "ERROR" "Refresh script failed for $name"
+                return 1
+            fi
+        fi
+
         # Check for requirements.txt and install if present
         local req_file="$repo_dir/requirements.txt"
         if [ -f "$req_file" ]; then
