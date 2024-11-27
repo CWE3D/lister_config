@@ -260,6 +260,25 @@ main() {
     check_root
     log_message "INFO" "Starting Lister configuration installation"
 
+    # Install Git LFS
+    log_message "INFO" "Installing Git LFS"
+    if ! command -v git-lfs &> /dev/null; then
+        apt-get update && apt-get install -y git-lfs || {
+            log_message "ERROR" "Failed to install Git LFS"
+            exit 1
+        }
+        log_message "INFO" "Git LFS installed successfully"
+    else
+        log_message "INFO" "Git LFS is already installed"
+    fi
+
+    # Initialize Git LFS
+    git lfs install || {
+        log_message "ERROR" "Failed to initialize Git LFS"
+        exit 1
+    }
+    log_message "INFO" "Git LFS initialized successfully"
+
     create_directories
 
     # Process each repository

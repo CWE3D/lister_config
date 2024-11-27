@@ -244,6 +244,26 @@ main() {
     verify_script_location
     log_message "INFO" "Starting Lister configuration refresh"
 
+    # Check Git LFS installation
+    log_message "INFO" "Checking Git LFS"
+    if ! command -v git-lfs &> /dev/null; then
+        log_message "INFO" "Installing Git LFS"
+        apt-get update && apt-get install -y git-lfs || {
+            log_message "ERROR" "Failed to install Git LFS"
+            exit 1
+        }
+        log_message "INFO" "Git LFS installed successfully"
+    else
+        log_message "INFO" "Git LFS is already installed"
+    fi
+
+    # Initialize Git LFS
+    git lfs install || {
+        log_message "ERROR" "Failed to initialize Git LFS"
+        exit 1
+    }
+    log_message "INFO" "Git LFS initialized successfully"
+
     # Check and update repositories
     for repo in "${!REPOS[@]}"; do
         check_repository "$repo"
