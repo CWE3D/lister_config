@@ -104,7 +104,6 @@ check_repository() {
         local refresh_script="$repo_dir/refresh.sh"
         if [ -f "$refresh_script" ]; then
             log_message "INFO" "Running refresh script for $name"
-            chmod +x "$refresh_script"
             if $refresh_script; then
                 log_message "INFO" "Refresh script completed successfully for $name"
             else
@@ -125,7 +124,6 @@ check_repository() {
         local install_script="$repo_dir/install.sh"
         if [ -f "$install_script" ]; then
             log_message "INFO" "Running install script for $name"
-            chmod +x "$install_script"
             if $install_script; then
                 REPO_STATUS[$name]="UPDATED"
                 # Fix permissions after install script
@@ -204,8 +202,7 @@ fix_permissions() {
             find "$repo_dir" -type d -exec chmod 755 {} \;
             # Fix file permissions
             find "$repo_dir" -type f -exec chmod 644 {} \;
-            # Make shell scripts executable
-            find "$repo_dir" -type f -name "*.sh" -exec chmod +x {} \;
+            # Shell script permissions are handled by .gitattributes
         fi
     done
 
@@ -244,7 +241,7 @@ main() {
     verify_script_location
     log_message "INFO" "Starting Lister configuration refresh"
 
-    # Check Git LFS installation
+        # Check Git LFS installation
     log_message "INFO" "Checking Git LFS"
     if ! command -v git-lfs &> /dev/null; then
         log_message "INFO" "Installing Git LFS"

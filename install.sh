@@ -144,7 +144,6 @@ handle_repository() {
     # Make install script executable if it exists
     local install_script="$repo_dir/install.sh"
     if [ -f "$install_script" ]; then
-        chmod +x "$install_script"
         log_message "INFO" "Running install script for $name"
         if $install_script; then
             INSTALL_STATUS[$name]="SUCCESS"
@@ -222,8 +221,7 @@ fix_permissions() {
             find "$repo_dir" -type d -exec chmod 755 {} \;
             # Fix file permissions
             find "$repo_dir" -type f -exec chmod 644 {} \;
-            # Make shell scripts executable
-            find "$repo_dir" -type f -name "*.sh" -exec chmod +x {} \;
+            # Shell script permissions are handled by .gitattributes
         fi
     done
 
