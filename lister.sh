@@ -405,7 +405,7 @@ main() {
     # Process repositories
     if [ "$MODE" = "refresh" ]; then
         # Handle lister_config first in refresh mode
-        check_repository "lister_config" || {
+        handle_repository "lister_config" || {
             log_message "ERROR" "Failed to update lister_config repository. Aborting."
             exit 1
         }
