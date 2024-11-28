@@ -6,14 +6,26 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Define repository information
-# Format: "repo_url:install_dir"
-declare -A REPOS=(
-    ["lister_config"]="https://github.com/CWE3D/lister_config.git:/home/pi/printer_data/config/lister_config"
-    ["lister_numpad_macros"]="https://github.com/CWE3D/lister_numpad_macros.git:/home/pi/lister_numpad_macros"
-    ["lister_sound_system"]="https://github.com/CWE3D/lister_sound_system.git:/home/pi/lister_sound_system"
-    ["lister_printables"]="https://github.com/CWE3D/lister_printables.git:/home/pi/printer_data/gcodes/lister_printables"
-)
+# Define repository information based on mode
+declare -A REPOS
+setup_repositories() {
+    if [ "$MODE" = "install" ]; then
+        # Install mode excludes lister_config as it's the running script
+        REPOS=(
+            ["lister_numpad_macros"]="https://github.com/CWE3D/lister_numpad_macros.git:/home/pi/lister_numpad_macros"
+            ["lister_sound_system"]="https://github.com/CWE3D/lister_sound_system.git:/home/pi/lister_sound_system"
+            ["lister_printables"]="https://github.com/CWE3D/lister_printables.git:/home/pi/printer_data/gcodes/lister_printables"
+        )
+    else
+        # Refresh mode includes all repositories
+        REPOS=(
+            ["lister_config"]="https://github.com/CWE3D/lister_config.git:/home/pi/printer_data/config/lister_config"
+            ["lister_numpad_macros"]="https://github.com/CWE3D/lister_numpad_macros.git:/home/pi/lister_numpad_macros"
+            ["lister_sound_system"]="https://github.com/CWE3D/lister_sound_system.git:/home/pi/lister_sound_system"
+            ["lister_printables"]="https://github.com/CWE3D/lister_printables.git:/home/pi/printer_data/gcodes/lister_printables"
+        )
+    fi
+}
 
 # Define paths
 LOG_DIR="/home/pi/printer_data/logs"
@@ -373,6 +385,8 @@ print_report() {
 main() {
     check_root
     verify_script_location
+    setup_repositories
+    
     log_message "INFO" "Starting Lister configuration ${MODE}"
 
     # Configure Git settings
@@ -384,18 +398,23 @@ main() {
         install_git_lfs
     fi
 
-    # Process each repository
+    # Process repositories
+    if [ "$MODE" = "refresh" ]; then
+        # Handle lister_config first in refresh mode
+        check_repository "lister_config" || {
+            log_message "ERROR" "Failed to update lister_config repository. Aborting."
+            exit 1
+        }
+    fi
+
+    # Process remaining repositories
     for repo in "${!REPOS[@]}"; do
+        [ "$MODE" = "refresh" ] && [ "$repo" = "lister_config" ] && continue
         handle_repository "$repo"
     done
 
-    # Fix permissions
     fix_permissions
-
-    # Check services
     check_services
-
-    # Print final report
     print_report
 
     log_message "INFO" "${MODE^} complete"
