@@ -216,18 +216,30 @@ fix_permissions() {
             log_message "INFO" "Final permission check for $repo_dir"
             # Fix owner and group recursively
             chown -R pi:pi "$repo_dir"
+            
             # Fix directory permissions
             find "$repo_dir" -type d -exec chmod 755 {} \;
-            # Fix file permissions
+            
+            # Reset all file permissions to 644 first
             find "$repo_dir" -type f -exec chmod 644 {} \;
-            # Shell script permissions are handled by .gitattributes
+            
+            # Let git set the correct executable bits based on .gitattributes
+            if [ -d "$repo_dir/.git" ]; then
+                (cd "$repo_dir" && git diff --quiet || {
+                    # Reset any permission changes in git
+                    git reset --hard
+                    # Update permissions based on .gitattributes
+                    git config core.fileMode true
+                    git checkout --force HEAD
+                })
+            fi
         fi
     done
 
     # Fix config and log directories
     log_message "INFO" "Fixing permissions for config and log directories"
     chown -R pi:pi "$CONFIG_DIR" "$LOG_DIR"
-    chmod -R 755 "$CONFIG_DIR" "$LOG_DIR"
+    chmod 755 "$CONFIG_DIR" "$LOG_DIR"
 }
 
 # Function to print installation report
