@@ -30,7 +30,7 @@ setup_repositories() {
 # Define paths
 LOG_DIR="/home/pi/printer_data/logs"
 CONFIG_DIR="/home/pi/printer_data/config"
-EXPECTED_SCRIPT_PATH="/home/pi/printer_data/config/lister_config/lister_manager.sh"
+EXPECTED_SCRIPT_PATH="/home/pi/printer_data/config/lister_config/lister.sh"
 RETRY_LIMIT=3
 
 # Status tracking
