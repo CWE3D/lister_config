@@ -203,30 +203,37 @@ fix_permissions() {
         local repo_dir=${repo_info##*:}
         if [ -d "$repo_dir" ]; then
             log_message "INFO" "Final permission check for $repo_dir"
-            # Fix owner and group recursively
-            chown -R pi:pi "$repo_dir"
             
-            # Fix directory permissions
+            # First, set all directories to 755
             find "$repo_dir" -type d -exec chmod 755 {} \;
             
-            # Reset all file permissions to 644 first
+            # Set all files to 644 by default
             find "$repo_dir" -type f -exec chmod 644 {} \;
             
-            # Let git set the correct executable bits based on .gitattributes
-            (cd "$repo_dir" && git diff --quiet || {
-                # Reset any permission changes in git
-                git reset --hard
-                # Update permissions based on .gitattributes
-                git config core.fileMode true
-                git checkout --force HEAD
-            })
+            # Only if it's a git repository
+            if [ -d "$repo_dir/.git" ]; then
+                (cd "$repo_dir" && {
+                    # Make sure we're on the right branch
+                    git checkout -f main
+                    
+                    # Set executable bit only for files marked as executable in .gitattributes
+                    git ls-files --stage | while read mode hash stage file; do
+                        if [ "$mode" = "100755" ]; then
+                            chmod +x "$file"
+                        fi
+                    done
+                })
+            fi
+            
+            # Set ownership after all permission changes
+            chown -R pi:pi "$repo_dir"
         fi
     done
 
-    # Fix config and log directories
+    # Fix config and log directories without recursive permission change
     log_message "INFO" "Fixing permissions for config and log directories"
     chown -R pi:pi "$CONFIG_DIR" "$LOG_DIR"
-    chmod -R 755 "$CONFIG_DIR" "$LOG_DIR"
+    chmod 755 "$CONFIG_DIR" "$LOG_DIR"
 }
 
 # Function to print status report

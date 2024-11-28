@@ -84,7 +84,6 @@ create_directories() {
 }
 
 # Function to clone or update a repository
-# Function to clone or update a repository
 handle_repository() {
     local name=$1
     local repo_info=${REPOS[$name]}
@@ -110,8 +109,7 @@ handle_repository() {
                  git checkout -f main && \
                  git reset --hard origin/main) && {
                     # Fix permissions after successful update
-                    chown -R pi:pi "$repo_dir"
-                    chmod -R 755 "$repo_dir"
+                    fix_repo_permissions "$repo_dir"
                     return 0
                 }
             fi
@@ -123,8 +121,7 @@ handle_repository() {
         log_message "INFO" "Cloning repository: $repo_url to $repo_dir"
         if git clone "$repo_url" "$repo_dir"; then
             # Fix permissions after successful clone
-            chown -R pi:pi "$repo_dir"
-            chmod -R 755 "$repo_dir"
+            fix_repo_permissions "$repo_dir"
             break
         fi
 
@@ -147,15 +144,12 @@ handle_repository() {
         if $install_script; then
             INSTALL_STATUS[$name]="SUCCESS"
             # Fix permissions again after install script runs
-            log_message "INFO" "Fixing permissions after install script"
-            chown -R pi:pi "$repo_dir"
-            chmod -R 755 "$repo_dir"
+            fix_repo_permissions "$repo_dir"
         else
             INSTALL_STATUS[$name]="FAILED_INSTALL"
             log_message "ERROR" "Installation failed for $name"
             # Fix permissions even if install failed
-            chown -R pi:pi "$repo_dir"
-            chmod -R 755 "$repo_dir"
+            fix_repo_permissions "$repo_dir"
             return 1
         fi
     else
@@ -175,6 +169,35 @@ handle_repository() {
     fi
 
     return 0
+}
+
+# New function to handle repository permissions
+fix_repo_permissions() {
+    local repo_dir=$1
+    
+    # First, set all directories to 755
+    find "$repo_dir" -type d -exec chmod 755 {} \;
+    
+    # Set all files to 644 by default
+    find "$repo_dir" -type f -exec chmod 644 {} \;
+    
+    # Only if it's a git repository
+    if [ -d "$repo_dir/.git" ]; then
+        (cd "$repo_dir" && {
+            # Make sure we're on the right branch
+            git checkout -f main
+            
+            # Set executable bit only for files marked as executable in .gitattributes
+            git ls-files --stage | while read mode hash stage file; do
+                if [ "$mode" = "100755" ]; then
+                    chmod +x "$file"
+                fi
+            done
+        })
+    fi
+    
+    # Set ownership after all permission changes
+    chown -R pi:pi "$repo_dir"
 }
 
 # Function to check service status
@@ -214,29 +237,11 @@ fix_permissions() {
         local repo_dir=${repo_info##*:}
         if [ -d "$repo_dir" ]; then
             log_message "INFO" "Final permission check for $repo_dir"
-            # Fix owner and group recursively
-            chown -R pi:pi "$repo_dir"
-            
-            # Fix directory permissions
-            find "$repo_dir" -type d -exec chmod 755 {} \;
-            
-            # Reset all file permissions to 644 first
-            find "$repo_dir" -type f -exec chmod 644 {} \;
-            
-            # Let git set the correct executable bits based on .gitattributes
-            if [ -d "$repo_dir/.git" ]; then
-                (cd "$repo_dir" && git diff --quiet || {
-                    # Reset any permission changes in git
-                    git reset --hard
-                    # Update permissions based on .gitattributes
-                    git config core.fileMode true
-                    git checkout --force HEAD
-                })
-            fi
+            fix_repo_permissions "$repo_dir"
         fi
     done
 
-    # Fix config and log directories
+    # Fix config and log directories without recursive permission change
     log_message "INFO" "Fixing permissions for config and log directories"
     chown -R pi:pi "$CONFIG_DIR" "$LOG_DIR"
     chmod 755 "$CONFIG_DIR" "$LOG_DIR"
