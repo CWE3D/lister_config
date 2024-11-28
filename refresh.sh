@@ -61,6 +61,27 @@ check_root() {
     fi
 }
 
+# Function to configure Git settings
+configure_git() {
+    log_message "INFO" "Configuring Git settings"
+    
+    # Configure global Git settings
+    git config --global core.fileMode true
+    git config --global core.autocrlf input
+    
+    # Verify configurations
+    local fileMode=$(git config --global core.fileMode)
+    local autoCRLF=$(git config --global core.autocrlf)
+    
+    if [ "$fileMode" = "true" ] && [ "$autoCRLF" = "input" ]; then
+        log_message "INFO" "Git configurations set successfully"
+    else
+        log_message "WARNING" "Git configurations may not have been set correctly"
+        log_message "INFO" "core.fileMode: $fileMode"
+        log_message "INFO" "core.autocrlf: $autoCRLF"
+    fi
+}
+
 # Function to check for repository updates
 check_repository() {
     local name=$1
@@ -82,6 +103,9 @@ check_repository() {
     # Store original HEAD
     local original_head=$(cd "$repo_dir" && git rev-parse HEAD)
 
+    # Configure Git to preserve file modes
+    (cd "$repo_dir" && git config core.fileMode true)
+
     # Fetch updates and force overwrite
     (cd "$repo_dir" && \
      git reset --hard && \
@@ -94,9 +118,8 @@ check_repository() {
         return 1
     }
 
-    # Fix permissions after git operations
-    chown -R pi:pi "$repo_dir"
-    chmod -R 755 "$repo_dir"
+    # Fix permissions properly
+    fix_repo_permissions "$repo_dir"
 
     # Check if there were updates
     local new_head=$(cd "$repo_dir" && git rev-parse HEAD)
@@ -135,14 +158,12 @@ check_repository() {
                 REPO_STATUS[$name]="UPDATED"
                 # Fix permissions after install script
                 log_message "INFO" "Fixing permissions after install script"
-                chown -R pi:pi "$repo_dir"
-                chmod -R 755 "$repo_dir"
+                fix_repo_permissions "$repo_dir"
             else
                 REPO_STATUS[$name]="INSTALL_FAILED"
                 log_message "ERROR" "Install script failed for $name"
                 # Fix permissions even if install failed
-                chown -R pi:pi "$repo_dir"
-                chmod -R 755 "$repo_dir"
+                fix_repo_permissions "$repo_dir"
                 return 1
             fi
         else
@@ -155,6 +176,45 @@ check_repository() {
     fi
 
     return 0
+}
+
+# New helper function for consistent permission handling
+fix_repo_permissions() {
+    local repo_dir=$1
+    
+    # First, set all directories to 755
+    find "$repo_dir" -type d -exec chmod 755 {} \;
+    
+    # Set all files to 644 by default
+    find "$repo_dir" -type f -exec chmod 644 {} \;
+    
+    # Only if it's a git repository
+    if [ -d "$repo_dir/.git" ]; then
+        (cd "$repo_dir" && {
+            # Make sure we're on the right branch
+            git checkout -f main
+            
+            # Set executable bit only for files marked as executable in .gitattributes
+            git ls-files --stage | while read mode hash stage file; do
+                if [ "$mode" = "100755" ]; then
+                    chmod +x "$file"
+                fi
+            done
+        })
+    fi
+
+    # Explicitly ensure install.sh and refresh.sh are executable if they exist
+    if [ -f "$repo_dir/install.sh" ]; then
+        log_message "INFO" "Making install.sh executable in $repo_dir"
+        chmod +x "$repo_dir/install.sh"
+    fi
+    if [ -f "$repo_dir/refresh.sh" ]; then
+        log_message "INFO" "Making refresh.sh executable in $repo_dir"
+        chmod +x "$repo_dir/refresh.sh"
+    fi
+    
+    # Set ownership after all permission changes
+    chown -R pi:pi "$repo_dir"
 }
 
 # Function to check service status
@@ -185,7 +245,7 @@ check_services() {
         fi
     done
 
-    # Check cron job for lister_printables
+    # Check cron job for lister_printables without modifying permissions
     if crontab -u pi -l 2>/dev/null | grep -q "update_lister_metadata.py"; then
         SERVICE_STATUS["printables_cron"]="CONFIGURED"
         log_message "INFO" "Printables cron job is configured"
@@ -203,37 +263,21 @@ fix_permissions() {
         local repo_dir=${repo_info##*:}
         if [ -d "$repo_dir" ]; then
             log_message "INFO" "Final permission check for $repo_dir"
-            
-            # First, set all directories to 755
-            find "$repo_dir" -type d -exec chmod 755 {} \;
-            
-            # Set all files to 644 by default
-            find "$repo_dir" -type f -exec chmod 644 {} \;
-            
-            # Only if it's a git repository
-            if [ -d "$repo_dir/.git" ]; then
-                (cd "$repo_dir" && {
-                    # Make sure we're on the right branch
-                    git checkout -f main
-                    
-                    # Set executable bit only for files marked as executable in .gitattributes
-                    git ls-files --stage | while read mode hash stage file; do
-                        if [ "$mode" = "100755" ]; then
-                            chmod +x "$file"
-                        fi
-                    done
-                })
-            fi
-            
-            # Set ownership after all permission changes
-            chown -R pi:pi "$repo_dir"
+            fix_repo_permissions "$repo_dir"
         fi
     done
 
     # Fix config and log directories without recursive permission change
     log_message "INFO" "Fixing permissions for config and log directories"
-    chown -R pi:pi "$CONFIG_DIR" "$LOG_DIR"
+    # Set directory permissions first
     chmod 755 "$CONFIG_DIR" "$LOG_DIR"
+    
+    # Set ownership
+    chown pi:pi "$CONFIG_DIR" "$LOG_DIR"
+    
+    # Handle files in these directories without making them executable
+    find "$CONFIG_DIR" "$LOG_DIR" -type f -exec chown pi:pi {} \; -exec chmod 644 {} \;
+    find "$CONFIG_DIR" "$LOG_DIR" -type d -exec chown pi:pi {} \; -exec chmod 755 {} \;
 }
 
 # Function to print status report
@@ -264,6 +308,9 @@ main() {
     check_root
     verify_script_location
     log_message "INFO" "Starting Lister configuration refresh"
+
+    # Configure Git settings
+    configure_git
 
     # Check Git LFS installation
     log_message "INFO" "Checking Git LFS"

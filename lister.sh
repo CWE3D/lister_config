@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# V2
 # Define colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -8,10 +7,9 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Define repository information
-# Format: "repo_url:install_dir:branch"
-# Define repository information
 # Format: "repo_url:install_dir"
 declare -A REPOS=(
+    ["lister_config"]="https://github.com/CWE3D/lister_config.git:/home/pi/printer_data/config/lister_config"
     ["lister_numpad_macros"]="https://github.com/CWE3D/lister_numpad_macros.git:/home/pi/lister_numpad_macros"
     ["lister_sound_system"]="https://github.com/CWE3D/lister_sound_system.git:/home/pi/lister_sound_system"
     ["lister_printables"]="https://github.com/CWE3D/lister_printables.git:/home/pi/printer_data/gcodes/lister_printables"
@@ -19,14 +17,61 @@ declare -A REPOS=(
 
 # Define paths
 LOG_DIR="/home/pi/printer_data/logs"
-INSTALL_LOG="${LOG_DIR}/lister_install.log"
 CONFIG_DIR="/home/pi/printer_data/config"
-EXPECTED_SCRIPT_PATH="/home/pi/printer_data/config/lister_config/install.sh"
-
-# Installation status tracking
-declare -A INSTALL_STATUS
-declare -A SERVICE_STATUS
+EXPECTED_SCRIPT_PATH="/home/pi/printer_data/config/lister_config/lister_manager.sh"
 RETRY_LIMIT=3
+
+# Status tracking
+declare -A REPO_STATUS
+declare -A SERVICE_STATUS
+declare -A UPDATE_STATUS
+
+# Function to configure Git settings
+configure_git() {
+    log_message "INFO" "Configuring Git settings"
+    
+    # Configure global Git settings
+    git config --global core.fileMode true
+    git config --global core.autocrlf input
+    
+    # Verify configurations
+    local fileMode=$(git config --global core.fileMode)
+    local autoCRLF=$(git config --global core.autocrlf)
+    
+    if [ "$fileMode" = "true" ] && [ "$autoCRLF" = "input" ]; then
+        log_message "INFO" "Git configurations set successfully"
+    else
+        log_message "WARNING" "Git configurations may not have been set correctly"
+        log_message "INFO" "core.fileMode: $fileMode"
+        log_message "INFO" "core.autocrlf: $autoCRLF"
+    fi
+}
+
+# Function to log messages
+log_message() {
+    local level=$1
+    local message=$2
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local color=""
+    local log_file="${LOG_DIR}/lister_${MODE}.log"
+
+    case $level in
+        "INFO") color=$GREEN ;;
+        "ERROR") color=$RED ;;
+        "WARNING") color=$YELLOW ;;
+        *) color=$NC ;;
+    esac
+
+    echo -e "${color}${timestamp} [${level}] ${message}${NC}" | tee -a "$log_file"
+}
+
+# Function to check if running as root
+check_root() {
+    if [ "$EUID" -ne 0 ]; then
+        log_message "ERROR" "Please run as root (sudo)"
+        exit 1
+    fi
+}
 
 # Function to verify script location
 verify_script_location() {
@@ -41,32 +86,7 @@ verify_script_location() {
     fi
 }
 
-# Function to log messages
-log_message() {
-    local level=$1
-    local message=$2
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local color=""
-
-    case $level in
-        "INFO") color=$GREEN ;;
-        "ERROR") color=$RED ;;
-        "WARNING") color=$YELLOW ;;
-        *) color=$NC ;;
-    esac
-
-    echo -e "${color}${timestamp} [${level}] ${message}${NC}" | tee -a "$INSTALL_LOG"
-}
-
-# Function to check if running as root
-check_root() {
-    if [ "$EUID" -ne 0 ]; then
-        log_message "ERROR" "Please run as root (sudo)"
-        exit 1
-    fi
-}
-
-# Function to create required directories
+# Function to create required directories (install only)
 create_directories() {
     local dirs=(
         "$LOG_DIR"
@@ -78,24 +98,48 @@ create_directories() {
         if [ ! -d "$dir" ]; then
             log_message "INFO" "Creating directory: $dir"
             mkdir -p "$dir"
+            chmod 755 "$dir"
             chown pi:pi "$dir"
         fi
     done
 }
 
-# Function to clone or update a repository
+# Function to install Git LFS (install only)
+install_git_lfs() {
+    log_message "INFO" "Installing Git LFS"
+    if ! command -v git-lfs &> /dev/null; then
+        apt-get update && apt-get install -y git-lfs || {
+            log_message "ERROR" "Failed to install Git LFS"
+            exit 1
+        }
+        log_message "INFO" "Git LFS installed successfully"
+    else
+        log_message "INFO" "Git LFS is already installed"
+    fi
+
+    # Initialize Git LFS
+    git lfs install || {
+        log_message "ERROR" "Failed to initialize Git LFS"
+        exit 1
+    }
+    log_message "INFO" "Git LFS initialized successfully"
+}
+
+# Function to handle repository operations
 handle_repository() {
     local name=$1
     local repo_info=${REPOS[$name]}
-
     local repo_url=${repo_info%:*}
     local repo_dir=${repo_info##*:}
+    local retry_count=0
 
     log_message "INFO" "Processing repository: $name"
     log_message "INFO" "URL: $repo_url"
     log_message "INFO" "Directory: $repo_dir"
 
-    local retry_count=0
+    # Store original HEAD if repository exists
+    local original_head=""
+    [ -d "$repo_dir/.git" ] && original_head=$(cd "$repo_dir" && git rev-parse HEAD)
 
     while [ $retry_count -lt $RETRY_LIMIT ]; do
         if [ -d "$repo_dir" ]; then
@@ -107,9 +151,19 @@ handle_repository() {
                  git fetch origin && \
                  git checkout -f main && \
                  git reset --hard origin/main) && {
-                    # Fix permissions after successful update
                     fix_repo_permissions "$repo_dir"
-                    INSTALL_STATUS[$name]="SUCCESS"
+                    REPO_STATUS[$name]="SUCCESS"
+                    
+                    # Check if there were updates (refresh only)
+                    if [ "$MODE" = "refresh" ]; then
+                        local new_head=$(cd "$repo_dir" && git rev-parse HEAD)
+                        if [ "$original_head" != "$new_head" ]; then
+                            UPDATE_STATUS[$name]="UPDATED"
+                        else
+                            UPDATE_STATUS[$name]="UNCHANGED"
+                        fi
+                    fi
+                    
                     return 0
                 }
             fi
@@ -118,11 +172,15 @@ handle_repository() {
             rm -rf "$repo_dir"
         fi
 
+        if [ "$MODE" = "refresh" ]; then
+            REPO_STATUS[$name]="FAILED_UPDATE"
+            return 1
+        fi
+
         log_message "INFO" "Cloning repository: $repo_url to $repo_dir"
         if git clone "$repo_url" "$repo_dir"; then
-            # Fix permissions after successful clone
             fix_repo_permissions "$repo_dir"
-            INSTALL_STATUS[$name]="SUCCESS"
+            REPO_STATUS[$name]="SUCCESS"
             break
         fi
 
@@ -133,30 +191,36 @@ handle_repository() {
             sleep 5
         else
             log_message "ERROR" "Failed to clone repository after $RETRY_LIMIT attempts"
-            INSTALL_STATUS[$name]="FAILED_CLONE"
+            REPO_STATUS[$name]="FAILED_CLONE"
             return 1
         fi
     done
 
-    # Check for and run install script
-    local install_script="$repo_dir/install.sh"
-    if [ -f "$install_script" ]; then
-        log_message "INFO" "Running install script for $name"
-        # No need for chmod +x here as fix_repo_permissions handles it
-        if $install_script; then
-            INSTALL_STATUS[$name]="SUCCESS"
-            # Fix permissions again after install script runs
+    # Handle post-clone/update operations
+    handle_repo_scripts "$name" "$repo_dir"
+    return 0
+}
+
+# Function to handle repository scripts
+handle_repo_scripts() {
+    local name=$1
+    local repo_dir=$2
+
+    # Check for and run install/refresh script
+    local script_name="${MODE}.sh"
+    local script_path="$repo_dir/$script_name"
+    
+    if [ -f "$script_path" ]; then
+        log_message "INFO" "Running $script_name for $name"
+        if $script_path; then
+            REPO_STATUS[$name]="SUCCESS"
             fix_repo_permissions "$repo_dir"
         else
-            INSTALL_STATUS[$name]="FAILED_INSTALL"
-            log_message "ERROR" "Installation failed for $name"
-            # Fix permissions even if install failed
+            REPO_STATUS[$name]="FAILED_SCRIPT"
+            log_message "ERROR" "$script_name failed for $name"
             fix_repo_permissions "$repo_dir"
             return 1
         fi
-    else
-        INSTALL_STATUS[$name]="NO_INSTALL_SCRIPT"
-        log_message "WARNING" "No install script found for $name"
     fi
 
     # Check for requirements.txt and install if present
@@ -165,7 +229,7 @@ handle_repository() {
         log_message "INFO" "Installing Python requirements for $name"
         if ! pip3 install -r "$req_file"; then
             log_message "ERROR" "Failed to install Python requirements for $name"
-            INSTALL_STATUS[$name]="FAILED_REQUIREMENTS"
+            REPO_STATUS[$name]="FAILED_REQUIREMENTS"
             return 1
         fi
     fi
@@ -173,7 +237,7 @@ handle_repository() {
     return 0
 }
 
-# New function to handle repository permissions
+# Function to fix repository permissions
 fix_repo_permissions() {
     local repo_dir=$1
     
@@ -220,7 +284,6 @@ check_services() {
         "numpad_event_service"
     )
 
-    # Check system services
     for service in "${services[@]}"; do
         if systemctl is-active --quiet "$service"; then
             SERVICE_STATUS[$service]="RUNNING"
@@ -228,10 +291,23 @@ check_services() {
         else
             SERVICE_STATUS[$service]="STOPPED"
             log_message "ERROR" "Service $service is not running"
+            
+            # Attempt to restart service in refresh mode
+            if [ "$MODE" = "refresh" ]; then
+                log_message "INFO" "Attempting to restart $service"
+                systemctl restart "$service"
+                sleep 2
+                if systemctl is-active --quiet "$service"; then
+                    SERVICE_STATUS[$service]="RESTARTED"
+                    log_message "INFO" "Successfully restarted $service"
+                else
+                    log_message "ERROR" "Failed to restart $service"
+                fi
+            fi
         fi
     done
 
-    # Check cron job for lister_printables without modifying permissions
+    # Check cron job for lister_printables
     if crontab -u pi -l 2>/dev/null | grep -q "update_lister_metadata.py"; then
         SERVICE_STATUS["printables_cron"]="CONFIGURED"
         log_message "INFO" "Printables cron job is configured"
@@ -266,53 +342,47 @@ fix_permissions() {
     find "$CONFIG_DIR" "$LOG_DIR" -type d -exec chown pi:pi {} \; -exec chmod 755 {} \;
 }
 
-# Function to print installation report
+# Function to print status report
 print_report() {
-    log_message "INFO" "Installation Report"
+    log_message "INFO" "${MODE^} Status Report"
     echo "----------------------------------------"
     echo "Repository Status:"
-    for repo in "${!INSTALL_STATUS[@]}"; do
-        local status=${INSTALL_STATUS[$repo]}
+    for repo in "${!REPO_STATUS[@]}"; do
+        local status=${REPO_STATUS[$repo]}
+        local update=${UPDATE_STATUS[$repo]}
         local color=$GREEN
         [[ $status != "SUCCESS" ]] && color=$RED
-        echo -e "${color}$repo: $status${NC}"
+        if [ "$MODE" = "refresh" ]; then
+            echo -e "${color}$repo: $status ($update)${NC}"
+        else
+            echo -e "${color}$repo: $status${NC}"
+        fi
     done
 
     echo -e "\nService Status:"
     for service in "${!SERVICE_STATUS[@]}"; do
         local status=${SERVICE_STATUS[$service]}
         local color=$GREEN
-        [[ $status != "RUNNING" && $status != "CONFIGURED" ]] && color=$RED
+        [[ $status != "RUNNING" && $status != "RESTARTED" && $status != "CONFIGURED" ]] && color=$RED
         echo -e "${color}$service: $status${NC}"
     done
     echo "----------------------------------------"
 }
 
-# Main installation process
+# Main process
 main() {
     check_root
-    log_message "INFO" "Starting Lister configuration installation"
+    verify_script_location
+    log_message "INFO" "Starting Lister configuration ${MODE}"
 
-    # Install Git LFS
-    log_message "INFO" "Installing Git LFS"
-    if ! command -v git-lfs &> /dev/null; then
-        apt-get update && apt-get install -y git-lfs || {
-            log_message "ERROR" "Failed to install Git LFS"
-            exit 1
-        }
-        log_message "INFO" "Git LFS installed successfully"
-    else
-        log_message "INFO" "Git LFS is already installed"
+    # Configure Git settings
+    configure_git
+
+    # Installation-specific tasks
+    if [ "$MODE" = "install" ]; then
+        create_directories
+        install_git_lfs
     fi
-
-    # Initialize Git LFS
-    git lfs install || {
-        log_message "ERROR" "Failed to initialize Git LFS"
-        exit 1
-    }
-    log_message "INFO" "Git LFS initialized successfully"
-
-    create_directories
 
     # Process each repository
     for repo in "${!REPOS[@]}"; do
@@ -328,8 +398,17 @@ main() {
     # Print final report
     print_report
 
-    log_message "INFO" "Installation complete"
+    log_message "INFO" "${MODE^} complete"
 }
 
-# Run the installation
-main
+# Script entry point
+case "$1" in
+    "install"|"refresh")
+        MODE="$1"
+        main
+        ;;
+    *)
+        echo "Usage: $0 {install|refresh}"
+        exit 1
+        ;;
+esac
