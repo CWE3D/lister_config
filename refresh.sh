@@ -121,7 +121,10 @@ check_repository() {
         local req_file="$repo_dir/requirements.txt"
         if [ -f "$req_file" ]; then
             log_message "INFO" "Installing updated Python requirements for $name"
-            pip3 install -r "$req_file"
+            pip3 install -r "${req_file%$'\r'}" || {
+                log_message "ERROR" "Failed to install requirements for $name"
+                return 1
+            }
         fi
 
         # Run install script if it exists
