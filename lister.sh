@@ -153,64 +153,51 @@ handle_repository() {
     local original_head=""
     [ -d "$repo_dir/.git" ] && original_head=$(cd "$repo_dir" && git rev-parse HEAD)
 
-    while [ $retry_count -lt $RETRY_LIMIT ]; do
-        if [ -d "$repo_dir" ]; then
+    if [ "$MODE" = "install" ]; then
+        # Installation logic with retry
+        while [ $retry_count -lt $RETRY_LIMIT ]; do
             if [ -d "$repo_dir/.git" ]; then
-                log_message "INFO" "Updating existing repository: $repo_dir"
-                (cd "$repo_dir" && \
-                 git reset --hard && \
-                 git clean -fd && \
-                 git fetch origin && \
-                 git checkout -f main && \
-                 git reset --hard origin/main) && {
-                    fix_repo_permissions "$repo_dir"
-                    REPO_STATUS[$name]="SUCCESS"
-                    
-                    # Check if there were updates (refresh only)
-                    if [ "$MODE" = "refresh" ]; then
-                        local new_head=$(cd "$repo_dir" && git rev-parse HEAD)
-                        if [ "$original_head" != "$new_head" ]; then
-                            UPDATE_STATUS[$name]="UPDATED"
-                        else
-                            UPDATE_STATUS[$name]="UNCHANGED"
-                        fi
-                    fi
-                    
-                    return 0
-                }
+                handle_existing_repo "$name" "$repo_dir" && return 0
             fi
-
-            log_message "WARNING" "Update failed, removing directory and trying fresh clone"
-            rm -rf "$repo_dir"
-        fi
-
-        if [ "$MODE" = "refresh" ]; then
-            REPO_STATUS[$name]="FAILED_UPDATE"
+            handle_new_repo "$name" "$repo_url" "$repo_dir" && return 0
+            
+            retry_count=$((retry_count + 1))
+            [ $retry_count -lt $RETRY_LIMIT ] && sleep 5
+        done
+        REPO_STATUS[$name]="FAILED"
+        return 1
+    else
+        # Refresh logic
+        if [ ! -d "$repo_dir/.git" ]; then
+            REPO_STATUS[$name]="MISSING"
+            UPDATE_STATUS[$name]="NONE"
             return 1
         fi
-
-        log_message "INFO" "Cloning repository: $repo_url to $repo_dir"
-        if git clone "$repo_url" "$repo_dir"; then
-            fix_repo_permissions "$repo_dir"
-            REPO_STATUS[$name]="SUCCESS"
-            break
-        fi
-
-        retry_count=$((retry_count + 1))
-        if [ $retry_count -lt $RETRY_LIMIT ]; then
-            log_message "WARNING" "Clone failed, retrying... (attempt $retry_count of $RETRY_LIMIT)"
-            rm -rf "$repo_dir"
-            sleep 5
+        
+        # Force reset any local changes before updating
+        (cd "$repo_dir" && {
+            git reset --hard
+            git clean -fd
+            git fetch origin
+            git checkout -f main
+            git reset --hard origin/main
+        }) || {
+            REPO_STATUS[$name]="UPDATE_FAILED"
+            UPDATE_STATUS[$name]="ERROR"
+            return 1
+        }
+        
+        local new_head=$(cd "$repo_dir" && git rev-parse HEAD)
+        
+        if [ "$original_head" != "$new_head" ]; then
+            UPDATE_STATUS[$name]="UPDATED"
+            REPO_STATUS[$name]="UPDATED"
         else
-            log_message "ERROR" "Failed to clone repository after $RETRY_LIMIT attempts"
-            REPO_STATUS[$name]="FAILED_CLONE"
-            return 1
+            UPDATE_STATUS[$name]="UNCHANGED"
+            REPO_STATUS[$name]="CURRENT"
         fi
-    done
-
-    # Handle post-clone/update operations
-    handle_repo_scripts "$name" "$repo_dir"
-    return 0
+        return 0
+    fi
 }
 
 # Function to handle repository scripts
