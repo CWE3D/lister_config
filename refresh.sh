@@ -9,6 +9,7 @@ NC='\033[0m' # No Color
 # Define repository information
 # Format: "repo_url:install_dir"
 declare -A REPOS=(
+    ["lister_config"]="https://github.com/CWE3D/lister_config.git:/home/pi/printer_data/config/lister_config"
     ["lister_numpad_macros"]="https://github.com/CWE3D/lister_numpad_macros.git:/home/pi/lister_numpad_macros"
     ["lister_sound_system"]="https://github.com/CWE3D/lister_sound_system.git:/home/pi/lister_sound_system"
     ["lister_printables"]="https://github.com/CWE3D/lister_printables.git:/home/pi/printer_data/gcodes/lister_printables"
@@ -244,7 +245,7 @@ main() {
     verify_script_location
     log_message "INFO" "Starting Lister configuration refresh"
 
-        # Check Git LFS installation
+    # Check Git LFS installation
     log_message "INFO" "Checking Git LFS"
     if ! command -v git-lfs &> /dev/null; then
         log_message "INFO" "Installing Git LFS"
@@ -264,9 +265,17 @@ main() {
     }
     log_message "INFO" "Git LFS initialized successfully"
 
-    # Check and update repositories
+    # First check and update lister_config repository
+    check_repository "lister_config" || {
+        log_message "ERROR" "Failed to update lister_config repository. Aborting."
+        exit 1
+    }
+
+    # Then check and update other repositories
     for repo in "${!REPOS[@]}"; do
-        check_repository "$repo"
+        if [ "$repo" != "lister_config" ]; then
+            check_repository "$repo"
+        fi
     done
 
     # Fix permissions
