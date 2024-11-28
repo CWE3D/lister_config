@@ -274,7 +274,7 @@ fix_repo_permissions() {
         })
     fi
 
-    # Explicitly ensure install.sh and refresh.sh are executable if they exist
+    # Explicitly ensure our scripts are executable
     if [ -f "$repo_dir/install.sh" ]; then
         log_message "INFO" "Making install.sh executable in $repo_dir"
         chmod +x "$repo_dir/install.sh"
@@ -282,6 +282,10 @@ fix_repo_permissions() {
     if [ -f "$repo_dir/refresh.sh" ]; then
         log_message "INFO" "Making refresh.sh executable in $repo_dir"
         chmod +x "$repo_dir/refresh.sh"
+    fi
+    if [ -f "$repo_dir/lister.sh" ]; then
+        log_message "INFO" "Making lister.sh executable in $repo_dir"
+        chmod +x "$repo_dir/lister.sh"
     fi
     
     # Set ownership after all permission changes
