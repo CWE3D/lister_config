@@ -137,6 +137,61 @@ install_git_lfs() {
     log_message "INFO" "Git LFS initialized successfully"
 }
 
+# Function to handle existing repository
+handle_existing_repo() {
+    local name=$1
+    local repo_dir=$2
+    
+    log_message "INFO" "Handling existing repository: $name"
+    
+    # Backup any local changes
+    if [ -d "$repo_dir" ]; then
+        (cd "$repo_dir" && {
+            git reset --hard
+            git clean -fd
+            git fetch origin
+            git checkout -f main
+            git reset --hard origin/main
+        }) || {
+            log_message "ERROR" "Failed to reset existing repository $name"
+            return 1
+        }
+        
+        handle_repo_scripts "$name" "$repo_dir" || return 1
+        REPO_STATUS[$name]="SUCCESS"
+        return 0
+    fi
+    return 1
+}
+
+# Function to handle new repository
+handle_new_repo() {
+    local name=$1
+    local repo_url=$2
+    local repo_dir=$3
+    
+    log_message "INFO" "Cloning new repository: $name"
+    
+    # Ensure parent directory exists
+    mkdir -p "$(dirname "$repo_dir")"
+    
+    # Clone the repository
+    git clone "$repo_url" "$repo_dir" || {
+        log_message "ERROR" "Failed to clone repository $name"
+        return 1
+    }
+    
+    # Initialize and update submodules if any
+    (cd "$repo_dir" && git submodule update --init --recursive) || {
+        log_message "ERROR" "Failed to initialize submodules for $name"
+        return 1
+    }
+    
+    handle_repo_scripts "$name" "$repo_dir" || return 1
+    REPO_STATUS[$name]="SUCCESS"
+    return 0
+}
+
 # Function to handle repository operations
 handle_repository() {
     local name=$1
