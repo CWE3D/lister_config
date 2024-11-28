@@ -421,6 +421,12 @@ main() {
     check_services
     print_report
 
+    # Final check to ensure lister.sh remains executable
+    if [ -f "$EXPECTED_SCRIPT_PATH" ]; then
+        log_message "INFO" "Ensuring lister.sh remains executable"
+        chmod +x "$EXPECTED_SCRIPT_PATH"
+    fi
+
     log_message "INFO" "${MODE^} complete"
 }
 
