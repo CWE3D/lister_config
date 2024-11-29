@@ -2,6 +2,9 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../lister_numpad_macros"
 		}
 	],
 	"settings": {}
