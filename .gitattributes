@@ -1,4 +1,6 @@
 # Scripts should be executable and use LF line endings
+*.gcode filter=lfs diff=lfs merge=lfs -text
+
 *.sh text eol=lf executable
 *.py text eol=lf executable
 
