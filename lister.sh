@@ -157,38 +157,7 @@ sync_with_check() {
     local dst="$2"
     local desc="$3"
     
-    if [[ $src == *"*"* ]]; then
-        # Handle wildcard pattern
-        local src_dir=$(dirname "$src")
-        local pattern=$(basename "$src")
-        
-        # Use nullglob to handle no matches gracefully
-        shopt -s nullglob
-        local files=("$src_dir"/$pattern)
-        shopt -u nullglob
-        
-        if [ ${#files[@]} -eq 0 ]; then
-            log_message "INFO" "No files found matching pattern: $pattern" "INSTALL"
-            return 0
-        fi
-        
-        # Process each matching file
-        for file in "${files[@]}"; do
-            if [ ! -f "$file" ]; then
-                continue
-            fi
-            
-            local base_name=$(basename "$file")
-            local dst_file="$dst/$base_name"
-            
-            if needs_update "$file" "$dst_file"; then
-                log_message "INFO" "Updating ${desc}: $base_name" "INSTALL"
-                cp -p "$file" "$dst/" || return 1
-            else
-                log_message "INFO" "File up to date: $base_name" "INSTALL"
-            fi
-        done
-    elif [ -d "$src" ]; then
+    if [ -d "$src" ]; then
         # Handle directory sync
         for file in $(find "$src" -type f); do
             local rel_path=${file#$src/}
@@ -209,7 +178,7 @@ sync_with_check() {
         local dst_file="${dst}/$(basename "$src")"
         if needs_update "$src" "$dst_file"; then
             log_message "INFO" "Updating ${desc}" "INSTALL"
-            cp -p "$src" "$dst/" || return 1
+            cp -p "$src" "$dst_file" || return 1
         else
             log_message "INFO" "File up to date: ${desc}" "INSTALL"
         fi
