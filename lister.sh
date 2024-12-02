@@ -130,41 +130,41 @@ install_python_deps() {
 sync_config_files() {
     log_message "INFO" "Syncing configuration files..." "INSTALL"
     
-    # Create required config directories
+    # Create required config directories if they don't exist
     mkdir -p "${CONFIG_DIR}/lister_config/macros"
     mkdir -p "${CONFIG_DIR}/.theme"
     
-    # Sync printables (only copy changed/new files)
-    if ! rsync -av --update --modify-window=1 "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/"; then
-        log_message "ERROR" "Failed to sync printables files" "INSTALL"
-        return 1
-    fi
+    # Function to sync with change detection
+    sync_with_check() {
+        local src="$1"
+        local dst="$2"
+        local desc="$3"
+        
+        # Use rsync in dry-run mode first to check for changes
+        if rsync -avn --update --modify-window=1 "$src" "$dst" | grep -q '^>f'; then
+            log_message "INFO" "Changes detected in ${desc}, syncing..." "INSTALL"
+            if ! rsync -av --update --modify-window=1 "$src" "$dst"; then
+                log_message "ERROR" "Failed to sync ${desc}" "INSTALL"
+                return 1
+            fi
+        else
+            log_message "INFO" "No changes detected in ${desc}, skipping" "INSTALL"
+        fi
+        return 0
+    }
     
-    # Sync root config files to printer_data/config
-    if ! rsync -av --update --modify-window=1 "${LISTER_CONFIG_DIR}"/*.cfg "${CONFIG_DIR}/"; then
-        log_message "ERROR" "Failed to sync root config files" "INSTALL"
-        return 1
-    fi
+    # Sync each component with change detection
+    sync_with_check "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/" "printables files" || return 1
     
-    # Sync config directory to printer_data/config/lister_config
-    if ! rsync -av --update --modify-window=1 "${LISTER_CONFIG_DIR}/config/"*.cfg "${CONFIG_DIR}/lister_config/"; then
-        log_message "ERROR" "Failed to sync lister config files" "INSTALL"
-        return 1
-    fi
+    sync_with_check "${LISTER_CONFIG_DIR}/"*.cfg "${CONFIG_DIR}/" "root config files" || return 1
     
-    # Sync macros directory to printer_data/config/lister_config/macros
-    if ! rsync -av --update --modify-window=1 "${LISTER_CONFIG_DIR}/macros/"*.cfg "${CONFIG_DIR}/lister_config/macros/"; then
-        log_message "ERROR" "Failed to sync macro config files" "INSTALL"
-        return 1
-    fi
+    sync_with_check "${LISTER_CONFIG_DIR}/config/"*.cfg "${CONFIG_DIR}/lister_config/" "lister config files" || return 1
     
-    # Sync theme files
-    if ! rsync -av --update --modify-window=1 "${LISTER_CONFIG_DIR}/lister_theme/" "${CONFIG_DIR}/.theme/"; then
-        log_message "ERROR" "Failed to sync theme files" "INSTALL"
-        return 1
-    fi
+    sync_with_check "${LISTER_CONFIG_DIR}/macros/"*.cfg "${CONFIG_DIR}/lister_config/macros/" "macro config files" || return 1
     
-    log_message "INFO" "Successfully synced all files" "INSTALL"
+    sync_with_check "${LISTER_CONFIG_DIR}/lister_theme/" "${CONFIG_DIR}/.theme/" "theme files" || return 1
+    
+    log_message "INFO" "Config sync completed" "INSTALL"
     return 0
 }
 
@@ -185,6 +185,9 @@ setup_symlinks() {
     # Z Force Move link
     ln -sf "${LISTER_CONFIG_DIR}/extras/z_force_move.py" \
         "${KLIPPER_DIR}/klippy/extras/z_force_move.py"
+        
+    # Reload systemd after setting up symlinks
+    systemctl daemon-reload
 }
 
 # Function to setup services
@@ -206,6 +209,7 @@ setup_services() {
     ln -sf "$SERVICE_FILE" \
         "/etc/systemd/system/numpad_event_service.service"
     
+    # Reload systemd right after creating the service symlink
     systemctl daemon-reload
     systemctl enable numpad_event_service.service
     
@@ -246,9 +250,6 @@ fix_permissions() {
 # Function to restart services
 restart_services() {
     log_message "INFO" "Restarting services..." "INSTALL"
-    
-    # Reload systemd configurations first
-    systemctl daemon-reload
     
     systemctl restart klipper
     sleep 2
