@@ -42,6 +42,10 @@ UPDATE_CLIENT_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/update_client.py"
 verify_printables_setup() {
     log_message "INFO" "Verifying printables setup..." "INSTALL"
     
+    # Create required directories first
+    mkdir -p "$PRINTABLES_INSTALL_DIR"
+    mkdir -p "$PRINTABLES_SCRIPTS_DIR"
+    
     # Check required directories
     local required_dirs=(
         "$PRINTABLES_DIR"
@@ -137,9 +141,6 @@ install_python_deps() {
 # Function to sync config files
 sync_config_files() {
     log_message "INFO" "Syncing configuration files..." "INSTALL"
-    
-    # Create required directories
-    mkdir -p "$PRINTABLES_INSTALL_DIR"
     
     # Sync printables
     if ! rsync -av --delete "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/"; then
