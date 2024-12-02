@@ -150,28 +150,27 @@ sync_config_files() {
             return 1
         fi
 
-        if [ "$debug_log" = true ]; then
-            log_message "DEBUG" "Checking: $src -> $dst" "INSTALL"
-            # Show file timestamps and sizes
-            log_message "DEBUG" "Source details: $(ls -l "$src")" "INSTALL"
-            [ -e "$dst/$(basename "$src")" ] && log_message "DEBUG" "Dest details: $(ls -l "$dst/$(basename "$src")")" "INSTALL"
-        fi
+        # Get destination full path including filename
+        local dst_file="${dst}/$(basename "$src")"
         
-        # Use rsync in dry-run mode first to check for changes
-        local changes=$(rsync -avn --update --modify-window=1 "$src" "$dst" 2>&1)
-        if echo "$changes" | grep -q '^>f'; then
+        # If destination doesn't exist, we need to copy
+        if [ ! -e "$dst_file" ]; then
+            log_message "INFO" "Destination file doesn't exist, copying ${desc}..." "INSTALL"
+            rsync -av "$src" "$dst" || return 1
+            return 0
+        fi
+
+        # Compare modification times and checksums
+        if [ "$src" -nt "$dst_file" ] || ! cmp -s "$src" "$dst_file"; then
             log_message "INFO" "Changes detected in ${desc}, syncing..." "INSTALL"
-            log_message "INFO" "Changes: $changes" "INSTALL"
-            if ! rsync -av --update --modify-window=1 "$src" "$dst"; then
+            if ! rsync -av --update "$src" "$dst"; then
                 log_message "ERROR" "Failed to sync ${desc}" "INSTALL"
                 return 1
             fi
         else
             log_message "INFO" "No changes detected in ${desc}" "INSTALL"
-            if [ "$debug_log" = true ]; then
-                log_message "DEBUG" "Rsync output: $changes" "INSTALL"
-            fi
         fi
+        
         return 0
     }
     
