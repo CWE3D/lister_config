@@ -55,7 +55,7 @@ verify_printables_setup() {
             log_error "Required directory not found: $dir" "INSTALL"
             return 1
         fi
-    }
+    done
     
     # Check required scripts
     local required_scripts=(
@@ -165,9 +165,7 @@ sync_config_files() {
 setup_symlinks() {
     log_message "INFO" "Setting up component symlinks..." "INSTALL"
     
-    # Numpad macros links
-    ln -sf "${NUMPAD_DIR}/extras/numpad_event_service.py" \
-        "${KLIPPER_DIR}/klippy/extras/numpad_event_service.py"
+    # Numpad macros links (remove the incorrect symlink)
     ln -sf "${NUMPAD_DIR}/components/numpad_macros.py" \
         "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py"
     
@@ -324,6 +322,12 @@ update_repo() {
 # Function to verify numpad setup
 verify_numpad_setup() {
     log_message "INFO" "Verifying numpad setup..." "INSTALL"
+    
+    # Ensure no incorrect symlink exists
+    if [ -L "${KLIPPER_DIR}/klippy/extras/numpad_event_service.py" ]; then
+        log_message "WARNING" "Removing incorrect numpad service symlink" "INSTALL"
+        rm -f "${KLIPPER_DIR}/klippy/extras/numpad_event_service.py"
+    fi
     
     # Check input group
     if ! groups pi | grep -q "input"; then

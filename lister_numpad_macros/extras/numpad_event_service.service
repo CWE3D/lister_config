@@ -6,7 +6,7 @@ Wants=moonraker.service
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/python3 ${NUMPAD_DIR}/extras/numpad_event_service.py
+ExecStart=/usr/bin/python3 /home/pi/lister_config/lister_numpad_macros/extras/numpad_event_service.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
