@@ -227,8 +227,8 @@ fix_permissions() {
     usermod -a -G input pi
     
     # Fix directory permissions
-    find "$LISTER_CONFIG_DIR" -type d -exec chmod 755 {} \;
-    find "$LISTER_CONFIG_DIR" -type f -exec chmod 644 {} \;
+    # find "$LISTER_CONFIG_DIR" -type d -exec chmod 755 {} \;
+    # find "$LISTER_CONFIG_DIR" -type f -exec chmod 644 {} \;
     
     # Make scripts executable
     chmod +x "${LISTER_CONFIG_DIR}/lister.sh"
@@ -449,8 +449,8 @@ setup_sound_system() {
     
     # Set permissions
     chown -R pi:pi "$SOUND_FILES_DIR"
-    find "$SOUND_FILES_DIR" -type d -exec chmod 755 {} \;
-    find "$SOUND_FILES_DIR" -type f -exec chmod 644 {} \;
+    # find "$SOUND_FILES_DIR" -type d -exec chmod 755 {} \;
+    # find "$SOUND_FILES_DIR" -type f -exec chmod 644 {} \;
     
     # Set initial volume
     if amixer sget 'PCM' &> /dev/null; then
