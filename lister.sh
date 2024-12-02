@@ -51,7 +51,7 @@ verify_printables_setup() {
     
     for dir in "${required_dirs[@]}"; do
         if [ ! -d "$dir" ]; then
-            log_error "Required directory not found: $dir" "INSTALL"
+            log_message "ERROR" "Required directory not found: $dir" "INSTALL"
             return 1
         fi
     done
@@ -65,7 +65,7 @@ verify_printables_setup() {
     
     for script in "${required_scripts[@]}"; do
         if [ ! -f "$script" ]; then
-            log_error "Required script not found: $script" "INSTALL"
+            log_message "ERROR" "Required script not found: $script" "INSTALL"
             return 1
         fi
         # Make script executable
@@ -74,7 +74,7 @@ verify_printables_setup() {
     
     # Verify cron job
     if ! crontab -l -u pi | grep -q "$METADATA_SCRIPT"; then
-        log_warning "Cron job not found for metadata script" "INSTALL"
+        log_message "WARNING" "Cron job not found for metadata script" "INSTALL"
         # Don't fail here as it might be first install
     fi
     
@@ -113,7 +113,7 @@ install_python_deps() {
     local req_file="${LISTER_CONFIG_DIR}/requirements.txt"
     
     if [ ! -f "$req_file" ]; then
-        log_error "Requirements file not found at $req_file" "INSTALL"
+        log_message "ERROR" "Requirements file not found at $req_file" "INSTALL"
         return 1
     fi
     
@@ -143,7 +143,7 @@ sync_config_files() {
     
     # Sync printables
     if ! rsync -av --delete "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/"; then
-        log_error "Failed to sync printables files" "INSTALL"
+        log_message "ERROR" "Failed to sync printables files" "INSTALL"
         return 1
     fi
     
@@ -152,7 +152,7 @@ sync_config_files() {
     local dest_count=$(find "$PRINTABLES_INSTALL_DIR" -type f -name "*.gcode" | wc -l)
     
     if [ "$source_count" -ne "$dest_count" ]; then
-        log_error "File count mismatch after sync" "INSTALL"
+        log_message "ERROR" "File count mismatch after sync" "INSTALL"
         return 1
     fi
     
@@ -196,7 +196,7 @@ setup_services() {
     
     # Verify setup
     verify_numpad_setup || {
-        log_error "Numpad setup verification failed" "INSTALL"
+        log_message "ERROR" "Numpad setup verification failed" "INSTALL"
         return 1
     }
 }
@@ -207,7 +207,7 @@ setup_cron_jobs() {
     
     # Check if crontab command exists
     if ! command -v crontab &> /dev/null; then
-        log_error "crontab command not found" "INSTALL"
+        log_message "ERROR" "crontab command not found" "INSTALL"
         return 1
     fi
     
@@ -219,7 +219,7 @@ setup_cron_jobs() {
     
     # Verify cron job was added
     if ! crontab -u pi -l | grep -q "$METADATA_SCRIPT"; then
-        log_error "Failed to setup cron job" "INSTALL"
+        log_message "ERROR" "Failed to setup cron job" "INSTALL"
         return 1
     fi
     
@@ -232,7 +232,7 @@ update_metadata() {
     log_message "INFO" "Updating printables metadata..." "INSTALL"
     
     if ! python3 "$METADATA_SCRIPT"; then
-        log_error "Failed to update metadata" "INSTALL"
+        log_message "ERROR" "Failed to update metadata" "INSTALL"
         return 1
     fi
     
@@ -283,7 +283,7 @@ verify_services() {
 
     for service in klipper moonraker numpad_event_service; do
         if ! systemctl is-active --quiet "$service"; then
-            log_error "$service failed to start" "INSTALL"
+            log_message "ERROR" "$service failed to start" "INSTALL"
             all_good=false
         else
             SERVICE_STATUS[$service]="RUNNING"
@@ -299,7 +299,7 @@ update_repo() {
     log_message "INFO" "Updating repository with LFS files..." "INSTALL"
     
     cd "$LISTER_CONFIG_DIR" || {
-        log_error "Failed to change to repository directory" "INSTALL"
+        log_message "ERROR" "Failed to change to repository directory" "INSTALL"
         return 1
     }
     
@@ -330,25 +330,25 @@ verify_numpad_setup() {
     
     # Check input group
     if ! groups pi | grep -q "input"; then
-        log_error "User 'pi' not in input group" "INSTALL"
+        log_message "ERROR" "User 'pi' not in input group" "INSTALL"
         return 1
     fi
     
     # Check keyboard module
     if ! lsmod | grep -q "uinput"; then
-        log_error "Required kernel module 'uinput' not loaded" "INSTALL"
+        log_message "ERROR" "Required kernel module 'uinput' not loaded" "INSTALL"
         return 1
     fi
     
     # Verify service file
     if [ ! -L "/etc/systemd/system/numpad_event_service.service" ]; then
-        log_error "Numpad service symlink not found" "INSTALL"
+        log_message "ERROR" "Numpad service symlink not found" "INSTALL"
         return 1
     fi
     
     # Check component installation
     if [ ! -L "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py" ]; then
-        log_error "Numpad component not installed" "INSTALL"
+        log_message "ERROR" "Numpad component not installed" "INSTALL"
         return 1
     fi
     
@@ -370,14 +370,14 @@ verify_sound_setup() {
     # Check audio tools
     for cmd in aplay amixer mpv; do
         if ! command -v $cmd &> /dev/null; then
-            log_error "Required command not found: $cmd" "INSTALL"
+            log_message "ERROR" "Required command not found: $cmd" "INSTALL"
             return 1
         fi
     done
     
     # Check audio device
     if ! aplay -l | grep -q "card"; then
-        log_error "No audio devices found" "INSTALL"
+        log_message "ERROR" "No audio devices found" "INSTALL"
         return 1
     fi
     
@@ -390,30 +390,30 @@ verify_sound_setup() {
     
     for dir in "${sound_dirs[@]}"; do
         if [ ! -d "$dir" ]; then
-            log_error "Sound directory not found: $dir" "INSTALL"
+            log_message "ERROR" "Sound directory not found: $dir" "INSTALL"
             return 1
         fi
     done
     
     # Check for sound files
     if [ -z "$(ls -A $SOUND_MP3_DIR)" ]; then
-        log_warning "No MP3 files found in sounds directory" "INSTALL"
+        log_message "WARNING" "No MP3 files found in sounds directory" "INSTALL"
     fi
     
     # Check component symlinks
     if [ ! -L "${KLIPPER_DIR}/klippy/extras/sound_system.py" ]; then
-        log_error "Sound system Klipper component not linked" "INSTALL"
+        log_message "ERROR" "Sound system Klipper component not linked" "INSTALL"
         return 1
     fi
     
     if [ ! -L "${MOONRAKER_DIR}/moonraker/components/sound_system_service.py" ]; then
-        log_error "Sound system Moonraker component not linked" "INSTALL"
+        log_message "ERROR" "Sound system Moonraker component not linked" "INSTALL"
         return 1
     fi
     
     # Test audio system
     if ! amixer sget 'PCM' &> /dev/null; then
-        log_error "Unable to access audio mixer" "INSTALL"
+        log_message "ERROR" "Unable to access audio mixer" "INSTALL"
         return 1
     fi
     
@@ -441,7 +441,7 @@ setup_sound_system() {
     
     # Verify setup
     verify_sound_setup || {
-        log_error "Sound system verification failed" "SOUND"
+        log_message "ERROR" "Sound system verification failed" "SOUND"
         return 1
     }
 }
@@ -453,13 +453,13 @@ verify_system_requirements() {
     # Check disk space (need at least 500MB free)
     local free_space=$(df -m /home/pi | awk 'NR==2 {print $4}')
     if [ "$free_space" -lt 500 ]; then
-        log_error "Insufficient disk space. Need at least 500MB free" "INSTALL"
+        log_message "ERROR" "Insufficient disk space. Need at least 500MB free" "INSTALL"
         return 1
     fi
     
     # Check network connectivity
     if ! ping -c 1 github.com &> /dev/null; then
-        log_error "No network connectivity to GitHub" "INSTALL"
+        log_message "ERROR" "No network connectivity to GitHub" "INSTALL"
         return 1
     fi
     
@@ -472,11 +472,29 @@ verify_system_requirements() {
     
     # Check Python version (need 3.7+)
     if ! python3 -c "import sys; exit(0 if sys.version_info >= (3, 7) else 1)"; then
-        log_error "Python 3.7 or higher required" "INSTALL"
+        log_message "ERROR" "Python 3.7 or higher required" "INSTALL"
         return 1
     fi
     
     return 0
+}
+
+# Function to check if script is run as root
+check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "This script must be run as root"
+        exit 1
+    fi
+}
+
+# Function to verify script location
+verify_script_location() {
+    local current_path=$(readlink -f "$0")
+    if [ "$current_path" != "$EXPECTED_SCRIPT_PATH" ]; then
+        echo "Script must be run from $EXPECTED_SCRIPT_PATH"
+        echo "Current location: $current_path"
+        exit 1
+    fi
 }
 
 # Main process
