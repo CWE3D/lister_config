@@ -247,6 +247,9 @@ fix_permissions() {
 restart_services() {
     log_message "INFO" "Restarting services..." "INSTALL"
     
+    # Reload systemd configurations first
+    systemctl daemon-reload
+    
     systemctl restart klipper
     sleep 2
     systemctl restart moonraker
