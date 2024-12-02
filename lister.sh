@@ -135,22 +135,14 @@ install_python_deps() {
 sync_config_files() {
     log_message "INFO" "Syncing configuration files..." "INSTALL"
     
-    # Sync printables
-    if ! rsync -av --delete "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/"; then
+    # Sync printables (only copy changed/new files)
+    if ! rsync -av --update --modify-window=1 "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/"; then
         log_message "ERROR" "Failed to sync printables files" "INSTALL"
         return 1
     fi
     
-    # Verify file copying
-    local source_count=$(find "${PRINTABLES_DIR}/gcodes/" -type f -name "*.gcode" | wc -l)
-    local dest_count=$(find "$PRINTABLES_INSTALL_DIR" -type f -name "*.gcode" | wc -l)
-    
-    if [ "$source_count" -ne "$dest_count" ]; then
-        log_message "ERROR" "File count mismatch after sync" "INSTALL"
-        return 1
-    fi
-    
-    log_message "INFO" "Successfully synced $source_count gcode files" "INSTALL"
+    # No need to verify exact file count since we're only updating changed files
+    log_message "INFO" "Successfully synced printables files" "INSTALL"
     return 0
 }
 
@@ -460,13 +452,6 @@ verify_system_requirements() {
     if ! ping -c 1 github.com &> /dev/null; then
         log_message "ERROR" "No network connectivity to GitHub" "INSTALL"
         return 1
-    fi
-    
-    # Check if backup directory exists
-    if [ ! -d "$BACKUP_DIR" ]; then
-        mkdir -p "$BACKUP_DIR"
-        chown pi:pi "$BACKUP_DIR"
-        chmod 755 "$BACKUP_DIR"
     fi
     
     # Check Python version (need 3.7+)
