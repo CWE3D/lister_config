@@ -70,15 +70,7 @@ verify_printables_setup() {
             log_message "ERROR" "Required script not found: $script" "INSTALL"
             return 1
         fi
-        # Make script executable
-        chmod +x "$script"
     done
-    
-    # Verify cron job
-    if ! crontab -l -u pi | grep -q "$METADATA_SCRIPT"; then
-        log_message "WARNING" "Cron job not found for metadata script" "INSTALL"
-        # Don't fail here as it might be first install
-    fi
     
     return 0
 }
@@ -213,6 +205,9 @@ setup_cron_jobs() {
         return 1
     fi
     
+    # Make metadata script executable
+    chmod +x "$METADATA_SCRIPT"
+    
     # Remove any existing metadata scan jobs
     crontab -u pi -l | grep -v "$METADATA_SCRIPT" | crontab -u pi -
     
@@ -255,7 +250,6 @@ fix_permissions() {
     # Make scripts executable
     chmod +x "${LISTER_CONFIG_DIR}/lister.sh"
     chmod +x "${PRINTABLES_DIR}/scripts/"*.py
-    chmod +x "${PRINTABLES_DIR}/scripts/"*.sh
     
     # Set ownership
     chown -R pi:pi "$LISTER_CONFIG_DIR"
