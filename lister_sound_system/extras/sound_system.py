@@ -123,14 +123,14 @@ class SoundSystem:
 
     def _setup_logger(self):
         """Configure dedicated logger for sound system"""
-        logger = logging.getLogger('SoundSystem')
+        logger = logging.getLogger('SOUND')
         logger.setLevel(logging.INFO)
 
         # Create file handler
-        log_path = Path('/home/pi/printer_data/logs/sound_system.log')
+        log_path = Path('/home/pi/printer_data/logs/lister_config.log')
         handler = logging.FileHandler(log_path)
         handler.setFormatter(logging.Formatter(
-            '%(asctime)s - %(levelname)s - %(message)s'))
+            '%(asctime)s - %(levelname)s - [%(name)s] - %(message)s'))
 
         logger.addHandler(handler)
         return logger

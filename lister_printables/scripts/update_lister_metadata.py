@@ -8,8 +8,8 @@ from requests.exceptions import RequestException
 
 # Configuration
 MOONRAKER_URL = "http://localhost:7125"
-LISTER_PRINTABLES_PATH = "/home/pi/printer_data/gcodes/lister_printables/gcodes"
-LOG_FILE = "/home/pi/printer_data/logs/metadata_scan.log"
+LISTER_PRINTABLES_PATH = "/home/pi/printer_data/gcodes/lister_printables"
+LOG_FILE = "/home/pi/printer_data/logs/lister_config.log"
 GCODES_ROOT = "/home/pi/printer_data/gcodes"
 MAX_RETRIES = 30
 RETRY_DELAY = 10  # seconds
@@ -18,7 +18,7 @@ def setup_logging():
     try:
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
         logging.basicConfig(filename=LOG_FILE, level=logging.INFO,
-                            format='%(asctime)s - %(levelname)s - %(message)s')
+                            format='%(asctime)s - %(levelname)s - [METADATA] - %(message)s')
         logging.info(f"Script started. Python version: {sys.version}")
         logging.info(f"Script path: {os.path.abspath(__file__)}")
         logging.info(f"Working directory: {os.getcwd()}")
@@ -26,14 +26,12 @@ def setup_logging():
         print(f"Failed to set up logging: {str(e)}")
         sys.exit(1)
 
-
 def is_moonraker_ready():
     try:
         response = requests.get(f"{MOONRAKER_URL}/server/info", timeout=5)
         return response.status_code == 200
     except RequestException:
         return False
-
 
 def wait_for_moonraker():
     for attempt in range(MAX_RETRIES):
@@ -44,7 +42,6 @@ def wait_for_moonraker():
             f"Waiting for Moonraker to be ready. Attempt {attempt + 1}/{MAX_RETRIES}. Retrying in {RETRY_DELAY} seconds...")
         time.sleep(RETRY_DELAY)
     return False
-
 
 def scan_file_metadata(file_path, max_retries=3):
     relative_path = os.path.relpath(file_path, GCODES_ROOT)
@@ -69,7 +66,6 @@ def scan_file_metadata(file_path, max_retries=3):
                 logging.error(f"Failed to scan metadata for {relative_path} after {max_retries} attempts")
                 return False
 
-
 def walk_directory(directory):
     for root, dirs, files in os.walk(directory):
         if '.thumbs' in dirs:
@@ -79,7 +75,6 @@ def walk_directory(directory):
                 full_path = os.path.join(root, file)
                 logging.info(f"Found file: {full_path}")
                 yield full_path
-
 
 def main():
     setup_logging()

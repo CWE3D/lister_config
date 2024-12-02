@@ -10,6 +10,8 @@ NC='\033[0m' # No Color
 LISTER_CONFIG_DIR="/home/pi/lister_config"
 CONFIG_DIR="/home/pi/printer_data/config"
 LOG_DIR="/home/pi/printer_data/logs"
+LOG_FILE="${LOG_DIR}/lister_config.log"
+BACKUP_DIR="/home/pi/printer_data/config/backups"
 KLIPPER_DIR="/home/pi/klipper"
 MOONRAKER_DIR="/home/pi/moonraker"
 KLIPPY_ENV="/home/pi/klippy-env"
@@ -39,7 +41,7 @@ UPDATE_CLIENT_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/update_client.py"
 
 # Add function to verify printables setup
 verify_printables_setup() {
-    log_message "INFO" "Verifying printables setup..."
+    log_message "INFO" "Verifying printables setup..." "INSTALL"
     
     # Check required directories
     local required_dirs=(
@@ -50,7 +52,7 @@ verify_printables_setup() {
     
     for dir in "${required_dirs[@]}"; do
         if [ ! -d "$dir" ]; then
-            log_error "Required directory not found: $dir"
+            log_error "Required directory not found: $dir" "INSTALL"
             return 1
         fi
     }
@@ -64,7 +66,7 @@ verify_printables_setup() {
     
     for script in "${required_scripts[@]}"; do
         if [ ! -f "$script" ]; then
-            log_error "Required script not found: $script"
+            log_error "Required script not found: $script" "INSTALL"
             return 1
         fi
         # Make script executable
@@ -73,9 +75,9 @@ verify_printables_setup() {
     
     # Verify cron job
     if ! crontab -l -u pi | grep -q "$METADATA_SCRIPT"; then
-        log_warning "Cron job not found for metadata script"
+        log_warning "Cron job not found for metadata script" "INSTALL"
         # Don't fail here as it might be first install
-    }
+    fi
     
     return 0
 }
@@ -86,7 +88,7 @@ log_message() {
     local message=$2
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local color=""
-    local log_file="${LOG_DIR}/lister_${MODE}.log"
+    local component="${3:-MAIN}"  # Optional third parameter for component name
 
     case $level in
         "INFO") color=$GREEN ;;
@@ -95,30 +97,30 @@ log_message() {
         *) color=$NC ;;
     esac
 
-    echo -e "${color}${timestamp} [${level}] ${message}${NC}" | tee -a "$log_file"
+    echo -e "${color}${timestamp} [${level}] [${component}] ${message}${NC}" | tee -a "$LOG_FILE"
 }
 
 # Function to install system dependencies
 install_system_deps() {
-    log_message "INFO" "Installing system dependencies..."
+    log_message "INFO" "Installing system dependencies..." "INSTALL"
     apt-get update
     apt-get install -y git-lfs alsa-utils python3-pip mpv
 }
 
 # Function to install Python requirements
 install_python_deps() {
-    log_message "INFO" "Installing Python requirements..."
+    log_message "INFO" "Installing Python requirements..." "INSTALL"
     
     local req_file="${LISTER_CONFIG_DIR}/requirements.txt"
     
     if [ ! -f "$req_file" ]; then
-        log_error "Requirements file not found at $req_file"
+        log_error "Requirements file not found at $req_file" "INSTALL"
         return 1
     fi
     
     # Install in each environment
     for env in "system" "klippy" "moonraker"; do
-        log_message "INFO" "Installing in $env environment..."
+        log_message "INFO" "Installing in $env environment..." "INSTALL"
         case $env in
             "system")
                 pip3 install -r "$req_file"
@@ -135,33 +137,33 @@ install_python_deps() {
 
 # Function to sync config files
 sync_config_files() {
-    log_message "INFO" "Syncing configuration files..."
+    log_message "INFO" "Syncing configuration files..." "INSTALL"
     
     # Create required directories
     mkdir -p "$PRINTABLES_INSTALL_DIR"
     
     # Sync printables
     if ! rsync -av --delete "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/"; then
-        log_error "Failed to sync printables files"
+        log_error "Failed to sync printables files" "INSTALL"
         return 1
-    }
+    fi
     
     # Verify file copying
     local source_count=$(find "${PRINTABLES_DIR}/gcodes/" -type f -name "*.gcode" | wc -l)
     local dest_count=$(find "$PRINTABLES_INSTALL_DIR" -type f -name "*.gcode" | wc -l)
     
     if [ "$source_count" -ne "$dest_count" ]; then
-        log_error "File count mismatch after sync"
+        log_error "File count mismatch after sync" "INSTALL"
         return 1
-    }
+    fi
     
-    log_message "INFO" "Successfully synced $source_count gcode files"
+    log_message "INFO" "Successfully synced $source_count gcode files" "INSTALL"
     return 0
 }
 
 # Function to setup symlinks
 setup_symlinks() {
-    log_message "INFO" "Setting up component symlinks..."
+    log_message "INFO" "Setting up component symlinks..." "INSTALL"
     
     # Numpad macros links
     ln -sf "${NUMPAD_DIR}/extras/numpad_event_service.py" \
@@ -178,7 +180,7 @@ setup_symlinks() {
 
 # Function to setup services
 setup_services() {
-    log_message "INFO" "Setting up services..."
+    log_message "INFO" "Setting up services..." "INSTALL"
     
     # Load required kernel module
     modprobe uinput
@@ -197,38 +199,52 @@ setup_services() {
     
     # Verify setup
     verify_numpad_setup || {
-        log_error "Numpad setup verification failed"
+        log_error "Numpad setup verification failed" "INSTALL"
         return 1
     }
 }
 
 # Function to setup cron jobs
 setup_cron_jobs() {
-    log_message "INFO" "Setting up cron jobs..."
+    log_message "INFO" "Setting up cron jobs..." "INSTALL"
     
-    if ! python3 "$CRON_SETUP_SCRIPT"; then
-        log_error "Failed to setup cron job"
+    # Check if crontab command exists
+    if ! command -v crontab &> /dev/null; then
+        log_error "crontab command not found" "INSTALL"
         return 1
-    }
+    fi
     
-    log_message "INFO" "Cron jobs setup successfully"
+    # Remove any existing metadata scan jobs
+    crontab -u pi -l | grep -v "$METADATA_SCRIPT" | crontab -u pi -
+    
+    # Add new metadata scan job (runs at 2 AM daily)
+    (crontab -u pi -l 2>/dev/null; echo "0 2 * * * $METADATA_SCRIPT") | crontab -u pi -
+    
+    # Verify cron job was added
+    if ! crontab -u pi -l | grep -q "$METADATA_SCRIPT"; then
+        log_error "Failed to setup cron job" "INSTALL"
+        return 1
+    fi
+    
+    log_message "INFO" "Cron job setup successfully. Metadata scan will run daily at 2:00 AM" "INSTALL"
+    return 0
 }
 
 # Function to update metadata
 update_metadata() {
-    log_message "INFO" "Updating printables metadata..."
+    log_message "INFO" "Updating printables metadata..." "INSTALL"
     
     if ! python3 "$METADATA_SCRIPT"; then
-        log_error "Failed to update metadata"
+        log_error "Failed to update metadata" "INSTALL"
         return 1
-    }
+    fi
     
-    log_message "INFO" "Metadata updated successfully"
+    log_message "INFO" "Metadata updated successfully" "INSTALL"
 }
 
 # Function to fix permissions
 fix_permissions() {
-    log_message "INFO" "Setting permissions..."
+    log_message "INFO" "Setting permissions..." "INSTALL"
     
     # Add user pi to input group
     usermod -a -G input pi
@@ -255,7 +271,7 @@ fix_permissions() {
 
 # Function to restart services
 restart_services() {
-    log_message "INFO" "Restarting services..."
+    log_message "INFO" "Restarting services..." "INSTALL"
     
     systemctl restart klipper
     sleep 2
@@ -270,11 +286,11 @@ verify_services() {
 
     for service in klipper moonraker numpad_event_service; do
         if ! systemctl is-active --quiet "$service"; then
-            log_error "$service failed to start"
+            log_error "$service failed to start" "INSTALL"
             all_good=false
         else
             SERVICE_STATUS[$service]="RUNNING"
-            log_message "INFO" "$service is running"
+            log_message "INFO" "$service is running" "INSTALL"
         fi
     done
 
@@ -283,16 +299,16 @@ verify_services() {
 
 # Function to update repository with LFS support
 update_repo() {
-    log_message "INFO" "Updating repository with LFS files..."
+    log_message "INFO" "Updating repository with LFS files..." "INSTALL"
     
     cd "$LISTER_CONFIG_DIR" || {
-        log_error "Failed to change to repository directory"
+        log_error "Failed to change to repository directory" "INSTALL"
         return 1
     }
     
     # Setup and fetch LFS files
     git lfs install
-    log_message "INFO" "Fetching LFS files..."
+    log_message "INFO" "Fetching LFS files..." "INSTALL"
     git lfs fetch --all
     git lfs checkout
     
@@ -301,37 +317,37 @@ update_repo() {
     git clean -fd
     git pull --force origin main
     
-    log_message "INFO" "Repository update completed"
+    log_message "INFO" "Repository update completed" "INSTALL"
     return 0
 }
 
 # Function to verify numpad setup
 verify_numpad_setup() {
-    log_message "INFO" "Verifying numpad setup..."
+    log_message "INFO" "Verifying numpad setup..." "INSTALL"
     
     # Check input group
     if ! groups pi | grep -q "input"; then
-        log_error "User 'pi' not in input group"
+        log_error "User 'pi' not in input group" "INSTALL"
         return 1
-    }
+    fi
     
     # Check keyboard module
     if ! lsmod | grep -q "uinput"; then
-        log_error "Required kernel module 'uinput' not loaded"
+        log_error "Required kernel module 'uinput' not loaded" "INSTALL"
         return 1
-    }
+    fi
     
     # Verify service file
     if [ ! -L "/etc/systemd/system/numpad_event_service.service" ]; then
-        log_error "Numpad service symlink not found"
+        log_error "Numpad service symlink not found" "INSTALL"
         return 1
-    }
+    fi
     
     # Check component installation
     if [ ! -L "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py" ]; then
-        log_error "Numpad component not installed"
+        log_error "Numpad component not installed" "INSTALL"
         return 1
-    }
+    fi
     
     # Verify log file setup
     local numpad_log="/home/pi/printer_data/logs/numpad_event_service.log"
@@ -339,28 +355,28 @@ verify_numpad_setup() {
         touch "$numpad_log"
         chown pi:pi "$numpad_log"
         chmod 644 "$numpad_log"
-    }
+    fi
     
     return 0
 }
 
 # Function to verify sound system
 verify_sound_setup() {
-    log_message "INFO" "Verifying sound system setup..."
+    log_message "INFO" "Verifying sound system setup..." "INSTALL"
     
     # Check audio tools
     for cmd in aplay amixer mpv; do
         if ! command -v $cmd &> /dev/null; then
-            log_error "Required command not found: $cmd"
+            log_error "Required command not found: $cmd" "INSTALL"
             return 1
         fi
-    }
+    done
     
     # Check audio device
     if ! aplay -l | grep -q "card"; then
-        log_error "No audio devices found"
+        log_error "No audio devices found" "INSTALL"
         return 1
-    }
+    fi
     
     # Check sound directories
     local sound_dirs=(
@@ -371,39 +387,39 @@ verify_sound_setup() {
     
     for dir in "${sound_dirs[@]}"; do
         if [ ! -d "$dir" ]; then
-            log_error "Sound directory not found: $dir"
+            log_error "Sound directory not found: $dir" "INSTALL"
             return 1
         fi
     }
     
     # Check for sound files
     if [ -z "$(ls -A $SOUND_MP3_DIR)" ]; then
-        log_warning "No MP3 files found in sounds directory"
+        log_warning "No MP3 files found in sounds directory" "INSTALL"
     fi
     
     # Check component symlinks
     if [ ! -L "${KLIPPER_DIR}/klippy/extras/sound_system.py" ]; then
-        log_error "Sound system Klipper component not linked"
+        log_error "Sound system Klipper component not linked" "INSTALL"
         return 1
-    }
+    fi
     
     if [ ! -L "${MOONRAKER_DIR}/moonraker/components/sound_system_service.py" ]; then
-        log_error "Sound system Moonraker component not linked"
+        log_error "Sound system Moonraker component not linked" "INSTALL"
         return 1
-    }
+    fi
     
     # Test audio system
     if ! amixer sget 'PCM' &> /dev/null; then
-        log_error "Unable to access audio mixer"
+        log_error "Unable to access audio mixer" "INSTALL"
         return 1
-    }
+    fi
     
     return 0
 }
 
 # Function to setup sound system
 setup_sound_system() {
-    log_message "INFO" "Setting up sound system..."
+    log_message "INFO" "Setting up sound system..." "SOUND"
     
     # Create sound directories
     mkdir -p "$SOUND_WAV_DIR"
@@ -417,14 +433,110 @@ setup_sound_system() {
     # Set initial volume
     if amixer sget 'PCM' &> /dev/null; then
         amixer -M sset 'PCM' 75%
-        log_message "INFO" "Set initial volume to 75%"
+        log_message "INFO" "Set initial volume to 75%" "SOUND"
     fi
     
     # Verify setup
     verify_sound_setup || {
-        log_error "Sound system verification failed"
+        log_error "Sound system verification failed" "SOUND"
         return 1
     }
+}
+
+# Function to verify system requirements
+verify_system_requirements() {
+    log_message "INFO" "Verifying system requirements..." "INSTALL"
+    
+    # Check disk space (need at least 500MB free)
+    local free_space=$(df -m /home/pi | awk 'NR==2 {print $4}')
+    if [ "$free_space" -lt 500 ]; then
+        log_error "Insufficient disk space. Need at least 500MB free" "INSTALL"
+        return 1
+    fi
+    
+    # Check network connectivity
+    if ! ping -c 1 github.com &> /dev/null; then
+        log_error "No network connectivity to GitHub" "INSTALL"
+        return 1
+    fi
+    
+    # Check if backup directory exists
+    if [ ! -d "$BACKUP_DIR" ]; then
+        mkdir -p "$BACKUP_DIR"
+        chown pi:pi "$BACKUP_DIR"
+        chmod 755 "$BACKUP_DIR"
+    fi
+    
+    # Check Python version (need 3.7+)
+    if ! python3 -c "import sys; exit(0 if sys.version_info >= (3, 7) else 1)"; then
+        log_error "Python 3.7 or higher required" "INSTALL"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Function to backup existing configuration
+backup_config() {
+    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local backup_file="${BACKUP_DIR}/config_backup_${timestamp}.tar.gz"
+    
+    log_message "INFO" "Creating configuration backup..." "INSTALL"
+    
+    # Create backup of config directory
+    if ! tar -czf "$backup_file" \
+        -C /home/pi/printer_data/config \
+        --exclude='backups' \
+        .; then
+        log_error "Backup creation failed" "INSTALL"
+        return 1
+    fi
+    
+    # Set permissions
+    chown pi:pi "$backup_file"
+    chmod 644 "$backup_file"
+    
+    # Cleanup old backups (keep last 5)
+    local backup_count=$(ls -1 "${BACKUP_DIR}"/config_backup_*.tar.gz 2>/dev/null | wc -l)
+    if [ "$backup_count" -gt 5 ]; then
+        log_message "INFO" "Cleaning up old backups..." "INSTALL"
+        ls -1t "${BACKUP_DIR}"/config_backup_*.tar.gz | tail -n +6 | xargs rm -f
+    fi
+    
+    log_message "INFO" "Backup created: $backup_file" "INSTALL"
+    return 0
+}
+
+# Function to handle installation failure
+handle_failure() {
+    local error_msg="$1"
+    local backup_file="$2"
+    
+    log_error "Installation failed: $error_msg" "INSTALL"
+    
+    if [ -n "$backup_file" ]; then
+        log_message "INFO" "Attempting to restore from backup: $backup_file" "INSTALL"
+        
+        # Stop services
+        systemctl stop klipper moonraker numpad_event_service
+        
+        # Restore from backup
+        if tar -xzf "$backup_file" -C /home/pi/printer_data/config; then
+            log_message "INFO" "Backup restored successfully" "INSTALL"
+            
+            # Restart services
+            systemctl start klipper
+            sleep 2
+            systemctl start moonraker
+            sleep 2
+            systemctl start numpad_event_service
+        else
+            log_error "Failed to restore from backup" "INSTALL"
+            log_error "Manual intervention required" "INSTALL"
+        fi
+    fi
+    
+    exit 1
 }
 
 # Main process
@@ -432,49 +544,58 @@ main() {
     check_root
     verify_script_location
     
-    log_message "INFO" "Starting Lister configuration ${MODE}"
+    # Verify system requirements first
+    verify_system_requirements || {
+        log_error "System requirements not met" "INSTALL"
+        exit 1
+    }
+    
+    log_message "INFO" "Starting Lister configuration ${MODE}" "INSTALL"
     
     if [ "$MODE" = "install" ]; then
+        # Create backup before installation
+        local backup_file=""
+        if backup_config; then
+            backup_file="${BACKUP_DIR}/config_backup_$(date +%Y%m%d_%H%M%S).tar.gz"
+        else
+            log_warning "Failed to create backup, proceeding without" "INSTALL"
+        fi
+        
         install_system_deps
         install_python_deps
         setup_services || {
-            log_error "Service setup failed"
-            exit 1
+            handle_failure "Service setup failed" "$backup_file"
         }
         setup_sound_system || {
-            log_error "Sound system setup failed"
-            exit 1
+            handle_failure "Sound system setup failed" "$backup_file"
         }
         verify_printables_setup || {
-            log_error "Printables verification failed"
-            exit 1
+            handle_failure "Printables verification failed" "$backup_file"
         }
         setup_cron_jobs || {
-            log_error "Cron setup failed"
-            exit 1
+            handle_failure "Cron setup failed" "$backup_file"
         }
     else
         # Update repository in refresh mode
         update_repo || {
-            log_error "Failed to update repository"
-            exit 1
+            handle_failure "Failed to update repository" "INSTALL"
         }
     fi
     
     sync_config_files || {
-        log_error "Config sync failed"
+        log_error "Config sync failed" "INSTALL"
         exit 1
     }
     setup_symlinks
     fix_permissions
     update_metadata || {
-        log_error "Metadata update failed"
+        log_error "Metadata update failed" "INSTALL"
         exit 1
     }
     restart_services
     verify_services
     
-    log_message "INFO" "${MODE^} complete"
+    log_message "INFO" "${MODE^} complete" "INSTALL"
 }
 
 # Script entry point

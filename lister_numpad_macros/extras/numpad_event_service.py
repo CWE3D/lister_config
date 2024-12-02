@@ -9,7 +9,7 @@ from typing import Dict, Optional
 
 # Configuration
 MOONRAKER_URL = "http://localhost:7125"
-LOG_FILE = "/home/pi/printer_data/logs/numpad_event_service.log"
+LOG_FILE = "/home/pi/printer_data/logs/lister_config.log"
 MAX_LOG_SIZE = 5 * 1024 * 1024  # 5 MB
 BACKUP_COUNT = 3
 
@@ -69,10 +69,10 @@ SCAN_CODE_MAPPING = {
 }
 
 # Set up logging
-logger = logging.getLogger("NumpadListener")
+logger = logging.getLogger("NUMPAD")
 logger.setLevel(logging.INFO)
 handler = RotatingFileHandler(LOG_FILE, maxBytes=MAX_LOG_SIZE, backupCount=BACKUP_COUNT)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - [%(name)s] - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
