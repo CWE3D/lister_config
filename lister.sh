@@ -134,6 +134,11 @@ sync_config_files() {
     mkdir -p "${CONFIG_DIR}/lister_config/macros"
     mkdir -p "${CONFIG_DIR}/.theme"
     
+    # Force copy root config files
+    log_message "INFO" "Copying root config files..." "INSTALL"
+    cp -f "${LISTER_CONFIG_DIR}/lister_printer.cfg" "${CONFIG_DIR}/"
+    cp -f "${LISTER_CONFIG_DIR}/lister_moonraker.cfg" "${CONFIG_DIR}/"
+    
     # Function to sync with change detection
     sync_with_check() {
         local src="$1"
@@ -169,17 +174,6 @@ sync_config_files() {
         fi
         return 0
     }
-    
-    # Sync specific root config files with explicit paths
-    for cfg in "lister_printer.cfg" "lister_moonraker.cfg"; do
-        local src="${LISTER_CONFIG_DIR}/${cfg}"
-        local dst="${CONFIG_DIR}/"
-        if [ -f "$src" ]; then
-            sync_with_check "$src" "$dst" "$cfg" || return 1
-        else
-            log_message "WARNING" "Config file not found: $src" "INSTALL"
-        fi
-    done
     
     # Sync other config files
     sync_with_check "${LISTER_CONFIG_DIR}/config/"*.cfg "${CONFIG_DIR}/lister_config/" "lister config files" || return 1
