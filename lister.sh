@@ -187,14 +187,17 @@ setup_services() {
         echo "uinput" >> /etc/modules
     fi
     
-    # Setup numpad event service
+    # Setup symlinks first
+    setup_symlinks
+    
+    # Then setup numpad event service
     ln -sf "$SERVICE_FILE" \
         "/etc/systemd/system/numpad_event_service.service"
     
     systemctl daemon-reload
     systemctl enable numpad_event_service.service
     
-    # Verify setup
+    # Verify setup after everything is in place
     verify_numpad_setup || {
         log_message "ERROR" "Numpad setup verification failed" "INSTALL"
         return 1
