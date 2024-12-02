@@ -316,13 +316,14 @@ update_repo() {
     
     # Setup and fetch LFS files
     git lfs install
+    
+    # Reset any local changes (including file modes)
+    git reset --hard
+    git clean -fd
+    
     log_message "INFO" "Fetching LFS files..." "INSTALL"
     git lfs fetch --all
     git lfs checkout
-    
-    # Clean and update repository
-    git reset --hard
-    git clean -fd
     git pull --force origin main
     
     log_message "INFO" "Repository update completed" "INSTALL"

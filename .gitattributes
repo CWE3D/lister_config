@@ -21,3 +21,7 @@
 *.ico binary
 *.wav binary
 *.mp3 binary
+
+# Set execute permissions for shell scripts
+*.sh text eol=lf
+lister.sh text eol=lf
