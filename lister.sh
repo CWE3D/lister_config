@@ -140,30 +140,52 @@ sync_config_files() {
         local dst="$2"
         local desc="$3"
         
+        if [ ! -e "$src" ]; then
+            log_message "ERROR" "Source does not exist: $src" "INSTALL"
+            return 1
+        fi
+
+        if [ "$debug_log" = true ]; then
+            log_message "DEBUG" "Checking: $src -> $dst" "INSTALL"
+            # Show file timestamps and sizes
+            log_message "DEBUG" "Source details: $(ls -l "$src")" "INSTALL"
+            [ -e "$dst/$(basename "$src")" ] && log_message "DEBUG" "Dest details: $(ls -l "$dst/$(basename "$src")")" "INSTALL"
+        fi
+        
         # Use rsync in dry-run mode first to check for changes
-        if rsync -avn --update --modify-window=1 "$src" "$dst" | grep -q '^>f'; then
+        local changes=$(rsync -avn --update --modify-window=1 "$src" "$dst" 2>&1)
+        if echo "$changes" | grep -q '^>f'; then
             log_message "INFO" "Changes detected in ${desc}, syncing..." "INSTALL"
+            log_message "INFO" "Changes: $changes" "INSTALL"
             if ! rsync -av --update --modify-window=1 "$src" "$dst"; then
                 log_message "ERROR" "Failed to sync ${desc}" "INSTALL"
                 return 1
             fi
         else
-            log_message "INFO" "No changes detected in ${desc}, skipping" "INSTALL"
+            log_message "INFO" "No changes detected in ${desc}" "INSTALL"
+            if [ "$debug_log" = true ]; then
+                log_message "DEBUG" "Rsync output: $changes" "INSTALL"
+            fi
         fi
         return 0
     }
     
-    # Sync each component with change detection
-    sync_with_check "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/" "printables files" || return 1
-    
-    # Sync specific root config files
-    sync_with_check "${LISTER_CONFIG_DIR}/lister_printer.cfg" "${CONFIG_DIR}/" "lister_printer.cfg" || return 1
-    sync_with_check "${LISTER_CONFIG_DIR}/lister_moonraker.cfg" "${CONFIG_DIR}/" "lister_moonraker.cfg" || return 1
+    # Sync specific root config files with explicit paths
+    for cfg in "lister_printer.cfg" "lister_moonraker.cfg"; do
+        local src="${LISTER_CONFIG_DIR}/${cfg}"
+        local dst="${CONFIG_DIR}/"
+        if [ -f "$src" ]; then
+            sync_with_check "$src" "$dst" "$cfg" || return 1
+        else
+            log_message "WARNING" "Config file not found: $src" "INSTALL"
+        fi
+    done
     
     # Sync other config files
     sync_with_check "${LISTER_CONFIG_DIR}/config/"*.cfg "${CONFIG_DIR}/lister_config/" "lister config files" || return 1
     sync_with_check "${LISTER_CONFIG_DIR}/macros/"*.cfg "${CONFIG_DIR}/lister_config/macros/" "macro config files" || return 1
     sync_with_check "${LISTER_CONFIG_DIR}/lister_theme/" "${CONFIG_DIR}/.theme/" "theme files" || return 1
+    sync_with_check "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/" "printables files" || return 1
     
     log_message "INFO" "Config sync completed" "INSTALL"
     return 0
