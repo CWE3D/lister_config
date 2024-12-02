@@ -135,14 +135,25 @@ install_python_deps() {
 sync_config_files() {
     log_message "INFO" "Syncing configuration files..." "INSTALL"
     
+    # Create config destination directory
+    mkdir -p "${CONFIG_DIR}/lister_config"
+    
     # Sync printables (only copy changed/new files)
     if ! rsync -av --update --modify-window=1 "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/"; then
         log_message "ERROR" "Failed to sync printables files" "INSTALL"
         return 1
     fi
     
-    # No need to verify exact file count since we're only updating changed files
-    log_message "INFO" "Successfully synced printables files" "INSTALL"
+    # Sync config files
+    if ! rsync -av --update --modify-window=1 \
+        "${LISTER_CONFIG_DIR}"/*.cfg \
+        "${LISTER_CONFIG_DIR}/macros/"*.cfg \
+        "${CONFIG_DIR}/lister_config/"; then
+        log_message "ERROR" "Failed to sync config files" "INSTALL"
+        return 1
+    fi
+    
+    log_message "INFO" "Successfully synced all files" "INSTALL"
     return 0
 }
 
