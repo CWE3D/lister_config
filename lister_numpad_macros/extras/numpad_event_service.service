@@ -1,0 +1,15 @@
+[Unit]
+Description=Numpad Listener Service for Moonraker
+After=network.target moonraker.service
+Wants=moonraker.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 ${NUMPAD_DIR}/extras/numpad_event_service.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
