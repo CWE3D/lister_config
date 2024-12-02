@@ -126,6 +126,84 @@ install_python_deps() {
     done
 }
 
+# Function to check if file needs updating
+needs_update() {
+    local src="$1"
+    local dst="$2"
+    
+    # If destination doesn't exist, needs update
+    if [ ! -e "$dst" ]; then
+        return 0  # true, needs update
+    fi
+    
+    # Compare sizes
+    local src_size=$(stat -c%s "$src")
+    local dst_size=$(stat -c%s "$dst")
+    if [ "$src_size" != "$dst_size" ]; then
+        return 0  # true, needs update
+    fi
+    
+    # Compare modification times
+    if [ "$src" -nt "$dst" ]; then
+        return 0  # true, needs update
+    fi
+    
+    return 1  # false, no update needed
+}
+
+# Function to sync with change detection
+sync_with_check() {
+    local src="$1"
+    local dst="$2"
+    local desc="$3"
+    
+    if [[ $src == *"*"* ]]; then
+        # Handle wildcard pattern
+        local src_dir=$(dirname "$src")
+        local pattern=$(basename "$src")
+        
+        # For each matching file
+        for file in $src_dir/$pattern; do
+            [ -e "$file" ] || continue  # Skip if no matches
+            
+            local dst_file="${dst}/$(basename "$file")"
+            if needs_update "$file" "$dst_file"; then
+                log_message "INFO" "Updating ${desc}: $(basename "$file")" "INSTALL"
+                cp -p "$file" "$dst/" || return 1
+            else
+                log_message "INFO" "File up to date: $(basename "$file")" "INSTALL"
+            fi
+        done
+    elif [ -d "$src" ]; then
+        # Handle directory sync
+        for file in $(find "$src" -type f); do
+            local rel_path=${file#$src/}
+            local dst_file="$dst/$rel_path"
+            
+            # Ensure destination directory exists
+            mkdir -p "$(dirname "$dst_file")"
+            
+            if needs_update "$file" "$dst_file"; then
+                log_message "INFO" "Updating ${desc}: $rel_path" "INSTALL"
+                cp -p "$file" "$dst_file" || return 1
+            else
+                log_message "INFO" "File up to date: $rel_path" "INSTALL"
+            fi
+        done
+    else
+        # Single file sync
+        local dst_file="${dst}/$(basename "$src")"
+        if needs_update "$src" "$dst_file"; then
+            log_message "INFO" "Updating ${desc}" "INSTALL"
+            cp -p "$src" "$dst/" || return 1
+        else
+            log_message "INFO" "File up to date: ${desc}" "INSTALL"
+        fi
+    fi
+    
+    return 0
+}
+
 # Function to sync config files
 sync_config_files() {
     log_message "INFO" "Syncing configuration files..." "INSTALL"
@@ -138,53 +216,6 @@ sync_config_files() {
     log_message "INFO" "Copying root config files..." "INSTALL"
     cp -f "${LISTER_CONFIG_DIR}/lister_printer.cfg" "${CONFIG_DIR}/"
     cp -f "${LISTER_CONFIG_DIR}/lister_moonraker.cfg" "${CONFIG_DIR}/"
-    
-    # Function to sync with change detection
-    sync_with_check() {
-        local src="$1"
-        local dst="$2"
-        local desc="$3"
-        
-        if [[ $src == *"*"* ]]; then
-            # This is a wildcard pattern
-            local src_dir=$(dirname "$src")
-            local pattern=$(basename "$src")
-            
-            # Check if any matching files exist
-            local matching_files=($src_dir/$pattern)
-            if [ ${#matching_files[@]} -eq 0 ] || [ ! -e "${matching_files[0]}" ]; then
-                log_message "ERROR" "No matching files found for pattern: $src" "INSTALL"
-                return 1
-            fi
-            
-            # Use rsync with --ignore-existing to prevent unnecessary copies
-            if ! rsync -av --update --ignore-existing "$src_dir"/$pattern "$dst"; then
-                log_message "ERROR" "Failed to sync ${desc}" "INSTALL"
-                return 1
-            fi
-        elif [ -d "$src" ]; then
-            # This is a directory sync
-            if ! rsync -av --update "$src/" "$dst/"; then
-                log_message "ERROR" "Failed to sync directory ${desc}" "INSTALL"
-                return 1
-            fi
-        else
-            # Single file sync
-            local dst_file="${dst}/$(basename "$src")"
-            
-            if [ ! -e "$dst_file" ]; then
-                log_message "INFO" "Copying new file ${desc}..." "INSTALL"
-                rsync -av "$src" "$dst" || return 1
-            elif [ "$src" -nt "$dst_file" ] || ! cmp -s "$src" "$dst_file"; then
-                log_message "INFO" "Updating changed file ${desc}..." "INSTALL"
-                rsync -av --update "$src" "$dst" || return 1
-            else
-                log_message "INFO" "File ${desc} is up to date" "INSTALL"
-            fi
-        fi
-        
-        return 0
-    }
     
     # Sync other config files
     sync_with_check "${LISTER_CONFIG_DIR}/config/"*.cfg "${CONFIG_DIR}/lister_config/" "lister config files" || return 1
