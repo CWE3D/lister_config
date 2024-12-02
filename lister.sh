@@ -317,26 +317,40 @@ verify_services() {
 
 # Function to update repository with LFS support
 update_repo() {
-    log_message "INFO" "Updating repository with LFS files..." "INSTALL"
+    log_message "INFO" "Checking for repository updates..." "INSTALL"
     
     cd "$LISTER_CONFIG_DIR" || {
         log_message "ERROR" "Failed to change to repository directory" "INSTALL"
         return 1
     }
     
-    # Setup and fetch LFS files
-    git lfs install
+    # Fetch latest changes
+    git fetch
     
-    # Reset any local changes (including file modes)
-    git reset --hard
-    git clean -fd
+    # Compare local and remote commit hashes
+    LOCAL=$(git rev-parse HEAD)
+    REMOTE=$(git rev-parse @{u})
     
-    log_message "INFO" "Fetching LFS files..." "INSTALL"
-    git lfs fetch --all
-    git lfs checkout
-    git pull --force origin main
+    if [ "$LOCAL" != "$REMOTE" ]; then
+        log_message "INFO" "New updates available. Pulling changes..." "INSTALL"
+        
+        # Reset any local changes (including file modes)
+        git reset --hard
+        git clean -fd
+        
+        # Pull changes
+        git pull --force origin main
+        
+        # Setup and fetch LFS files
+        git lfs install
+        git lfs fetch --all
+        git lfs checkout
+        
+        log_message "INFO" "Repository update completed" "INSTALL"
+    else
+        log_message "INFO" "Repository is already up-to-date." "INSTALL"
+    fi
     
-    log_message "INFO" "Repository update completed" "INSTALL"
     return 0
 }
 
