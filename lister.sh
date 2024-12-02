@@ -159,7 +159,7 @@ sync_with_check() {
     
     if [ -d "$src" ]; then
         # Handle directory sync
-        for file in $(find "$src" -type f); do
+        find "$src" -type f | while read -r file; do
             local rel_path=${file#$src/}
             local dst_file="$dst/$rel_path"
             
@@ -173,7 +173,7 @@ sync_with_check() {
                 log_message "INFO" "File up to date: $rel_path" "INSTALL"
             fi
         done
-    else
+    elif [ -f "$src" ]; then
         # Single file sync
         local dst_file="${dst}/$(basename "$src")"
         if needs_update "$src" "$dst_file"; then
@@ -182,6 +182,9 @@ sync_with_check() {
         else
             log_message "INFO" "File up to date: ${desc}" "INSTALL"
         fi
+    else
+        log_message "ERROR" "Source path is neither a file nor a directory: $src" "INSTALL"
+        return 1
     fi
     
     return 0
