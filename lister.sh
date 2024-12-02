@@ -11,7 +11,6 @@ LISTER_CONFIG_DIR="/home/pi/lister_config"
 CONFIG_DIR="/home/pi/printer_data/config"
 LOG_DIR="/home/pi/printer_data/logs"
 LOG_FILE="${LOG_DIR}/lister_config.log"
-BACKUP_DIR="/home/pi/printer_data/config/backups"
 KLIPPER_DIR="/home/pi/klipper"
 MOONRAKER_DIR="/home/pi/moonraker"
 KLIPPY_ENV="/home/pi/klippy-env"
@@ -480,69 +479,6 @@ verify_system_requirements() {
     return 0
 }
 
-# Function to backup existing configuration
-backup_config() {
-    local timestamp=$(date +%Y%m%d_%H%M%S)
-    local backup_file="${BACKUP_DIR}/config_backup_${timestamp}.tar.gz"
-    
-    log_message "INFO" "Creating configuration backup..." "INSTALL"
-    
-    # Create backup of config directory
-    if ! tar -czf "$backup_file" \
-        -C /home/pi/printer_data/config \
-        --exclude='backups' \
-        .; then
-        log_error "Backup creation failed" "INSTALL"
-        return 1
-    fi
-    
-    # Set permissions
-    chown pi:pi "$backup_file"
-    chmod 644 "$backup_file"
-    
-    # Cleanup old backups (keep last 5)
-    local backup_count=$(ls -1 "${BACKUP_DIR}"/config_backup_*.tar.gz 2>/dev/null | wc -l)
-    if [ "$backup_count" -gt 5 ]; then
-        log_message "INFO" "Cleaning up old backups..." "INSTALL"
-        ls -1t "${BACKUP_DIR}"/config_backup_*.tar.gz | tail -n +6 | xargs rm -f
-    fi
-    
-    log_message "INFO" "Backup created: $backup_file" "INSTALL"
-    return 0
-}
-
-# Function to handle installation failure
-handle_failure() {
-    local error_msg="$1"
-    local backup_file="$2"
-    
-    log_error "Installation failed: $error_msg" "INSTALL"
-    
-    if [ -n "$backup_file" ]; then
-        log_message "INFO" "Attempting to restore from backup: $backup_file" "INSTALL"
-        
-        # Stop services
-        systemctl stop klipper moonraker numpad_event_service
-        
-        # Restore from backup
-        if tar -xzf "$backup_file" -C /home/pi/printer_data/config; then
-            log_message "INFO" "Backup restored successfully" "INSTALL"
-            
-            # Restart services
-            systemctl start klipper
-            sleep 2
-            systemctl start moonraker
-            sleep 2
-            systemctl start numpad_event_service
-        else
-            log_error "Failed to restore from backup" "INSTALL"
-            log_error "Manual intervention required" "INSTALL"
-        fi
-    fi
-    
-    exit 1
-}
-
 # Main process
 main() {
     check_root
@@ -550,50 +486,47 @@ main() {
     
     # Verify system requirements first
     verify_system_requirements || {
-        log_error "System requirements not met" "INSTALL"
+        log_message "ERROR" "System requirements not met" "INSTALL"
         exit 1
     }
     
     log_message "INFO" "Starting Lister configuration ${MODE}" "INSTALL"
     
     if [ "$MODE" = "install" ]; then
-        # Create backup before installation
-        local backup_file=""
-        if backup_config; then
-            backup_file="${BACKUP_DIR}/config_backup_$(date +%Y%m%d_%H%M%S).tar.gz"
-        else
-            log_warning "Failed to create backup, proceeding without" "INSTALL"
-        fi
-        
         install_system_deps
         install_python_deps
         setup_services || {
-            handle_failure "Service setup failed" "$backup_file"
+            log_message "ERROR" "Service setup failed" "INSTALL"
+            exit 1
         }
         setup_sound_system || {
-            handle_failure "Sound system setup failed" "$backup_file"
+            log_message "ERROR" "Sound system setup failed" "INSTALL"
+            exit 1
         }
         verify_printables_setup || {
-            handle_failure "Printables verification failed" "$backup_file"
+            log_message "ERROR" "Printables verification failed" "INSTALL"
+            exit 1
         }
         setup_cron_jobs || {
-            handle_failure "Cron setup failed" "$backup_file"
+            log_message "ERROR" "Cron setup failed" "INSTALL"
+            exit 1
         }
     else
         # Update repository in refresh mode
         update_repo || {
-            handle_failure "Failed to update repository" "INSTALL"
+            log_message "ERROR" "Failed to update repository" "INSTALL"
+            exit 1
         }
     fi
     
     sync_config_files || {
-        log_error "Config sync failed" "INSTALL"
+        log_message "ERROR" "Config sync failed" "INSTALL"
         exit 1
     }
     setup_symlinks
     fix_permissions
     update_metadata || {
-        log_error "Metadata update failed" "INSTALL"
+        log_message "ERROR" "Metadata update failed" "INSTALL"
         exit 1
     }
     restart_services
