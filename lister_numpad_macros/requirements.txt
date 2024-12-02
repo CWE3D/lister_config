@@ -1,3 +1,0 @@
-# Required for input device handling
-keyboard==0.13.5
-requests==2.32.0

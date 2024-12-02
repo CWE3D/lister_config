@@ -6,57 +6,78 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Define repository information based on mode
-declare -A REPOS
-setup_repositories() {
-    if [ "$MODE" = "install" ]; then
-        # Install mode excludes lister_config as it's the running script
-        REPOS=(
-            ["lister_numpad_macros"]="https://github.com/CWE3D/lister_numpad_macros.git:/home/pi/lister_numpad_macros"
-            ["lister_sound_system"]="https://github.com/CWE3D/lister_sound_system.git:/home/pi/lister_sound_system"
-            ["lister_printables"]="https://github.com/CWE3D/lister_printables.git:/home/pi/printer_data/gcodes/lister_printables"
-        )
-    else
-        # Refresh mode includes all repositories
-        REPOS=(
-            ["lister_config"]="https://github.com/CWE3D/lister_config.git:/home/pi/printer_data/config/lister_config"
-            ["lister_numpad_macros"]="https://github.com/CWE3D/lister_numpad_macros.git:/home/pi/lister_numpad_macros"
-            ["lister_sound_system"]="https://github.com/CWE3D/lister_sound_system.git:/home/pi/lister_sound_system"
-            ["lister_printables"]="https://github.com/CWE3D/lister_printables.git:/home/pi/printer_data/gcodes/lister_printables"
-        )
-    fi
-}
-
 # Define paths
-LOG_DIR="/home/pi/printer_data/logs"
+LISTER_CONFIG_DIR="/home/pi/lister_config"
 CONFIG_DIR="/home/pi/printer_data/config"
-EXPECTED_SCRIPT_PATH="/home/pi/printer_data/config/lister_config/lister.sh"
-RETRY_LIMIT=3
+LOG_DIR="/home/pi/printer_data/logs"
+KLIPPER_DIR="/home/pi/klipper"
+MOONRAKER_DIR="/home/pi/moonraker"
+KLIPPY_ENV="/home/pi/klippy-env"
+MOONRAKER_ENV="/home/pi/moonraker-env"
+EXPECTED_SCRIPT_PATH="/home/pi/lister_config/lister.sh"
+
+# Component paths
+PRINTABLES_DIR="${LISTER_CONFIG_DIR}/lister_printables"
+SOUND_DIR="${LISTER_CONFIG_DIR}/lister_sound_system"
+SOUND_FILES_DIR="${SOUND_DIR}/sounds"
+SOUND_MP3_DIR="${SOUND_FILES_DIR}/mp3"
+SOUND_WAV_DIR="${SOUND_FILES_DIR}/wav"
+NUMPAD_DIR="${LISTER_CONFIG_DIR}/lister_numpad_macros"
+SERVICE_FILE="${NUMPAD_DIR}/extras/numpad_event_service.service"
+
+# Installation directories
+PRINTABLES_INSTALL_DIR="/home/pi/printer_data/gcodes/lister_printables"
 
 # Status tracking
-declare -A REPO_STATUS
 declare -A SERVICE_STATUS
-declare -A UPDATE_STATUS
 
-# Function to configure Git settings
-configure_git() {
-    log_message "INFO" "Configuring Git settings"
+# Define paths
+PRINTABLES_SCRIPTS_DIR="${PRINTABLES_DIR}/scripts"
+METADATA_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/update_lister_metadata.py"
+CRON_SETUP_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/setup_one_time_cron.py"
+UPDATE_CLIENT_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/update_client.py"
+
+# Add function to verify printables setup
+verify_printables_setup() {
+    log_message "INFO" "Verifying printables setup..."
     
-    # Configure global Git settings
-    git config --global core.fileMode true
-    git config --global core.autocrlf input
+    # Check required directories
+    local required_dirs=(
+        "$PRINTABLES_DIR"
+        "$PRINTABLES_INSTALL_DIR"
+        "$PRINTABLES_SCRIPTS_DIR"
+    )
     
-    # Verify configurations
-    local fileMode=$(git config --global core.fileMode)
-    local autoCRLF=$(git config --global core.autocrlf)
+    for dir in "${required_dirs[@]}"; do
+        if [ ! -d "$dir" ]; then
+            log_error "Required directory not found: $dir"
+            return 1
+        fi
+    }
     
-    if [ "$fileMode" = "true" ] && [ "$autoCRLF" = "input" ]; then
-        log_message "INFO" "Git configurations set successfully"
-    else
-        log_message "WARNING" "Git configurations may not have been set correctly"
-        log_message "INFO" "core.fileMode: $fileMode"
-        log_message "INFO" "core.autocrlf: $autoCRLF"
-    fi
+    # Check required scripts
+    local required_scripts=(
+        "$METADATA_SCRIPT"
+        "$CRON_SETUP_SCRIPT"
+        "$UPDATE_CLIENT_SCRIPT"
+    )
+    
+    for script in "${required_scripts[@]}"; do
+        if [ ! -f "$script" ]; then
+            log_error "Required script not found: $script"
+            return 1
+        fi
+        # Make script executable
+        chmod +x "$script"
+    }
+    
+    # Verify cron job
+    if ! crontab -l -u pi | grep -q "$METADATA_SCRIPT"; then
+        log_warning "Cron job not found for metadata script"
+        # Don't fail here as it might be first install
+    }
+    
+    return 0
 }
 
 # Function to log messages
@@ -77,398 +98,382 @@ log_message() {
     echo -e "${color}${timestamp} [${level}] ${message}${NC}" | tee -a "$log_file"
 }
 
-# Function to check if running as root
-check_root() {
-    if [ "$EUID" -ne 0 ]; then
-        log_message "ERROR" "Please run as root (sudo)"
-        exit 1
-    fi
+# Function to install system dependencies
+install_system_deps() {
+    log_message "INFO" "Installing system dependencies..."
+    apt-get update
+    apt-get install -y git-lfs alsa-utils python3-pip mpv
 }
 
-# Function to verify script location
-verify_script_location() {
-    local current_script=$(realpath "$0")
-    if [ "$current_script" != "$EXPECTED_SCRIPT_PATH" ]; then
-        echo -e "${RED}Error: This script must be run from within the lister_config repository${NC}"
-        echo -e "${YELLOW}Expected location: ${EXPECTED_SCRIPT_PATH}${NC}"
-        echo -e "${YELLOW}Current location: ${current_script}${NC}"
-        echo -e "${YELLOW}Please clone lister_config repository first:${NC}"
-        echo "git clone https://github.com/CWE3D/lister_config.git /home/pi/printer_data/config/lister_config"
-        exit 1
+# Function to install Python requirements
+install_python_deps() {
+    log_message "INFO" "Installing Python requirements..."
+    
+    local req_file="${LISTER_CONFIG_DIR}/requirements.txt"
+    
+    if [ ! -f "$req_file" ]; then
+        log_error "Requirements file not found at $req_file"
+        return 1
     fi
-}
-
-# Function to create required directories (install only)
-create_directories() {
-    local dirs=(
-        "$LOG_DIR"
-        "$CONFIG_DIR"
-        "/home/pi/printer_data/gcodes"
-    )
-
-    for dir in "${dirs[@]}"; do
-        if [ ! -d "$dir" ]; then
-            log_message "INFO" "Creating directory: $dir"
-            mkdir -p "$dir"
-            chmod 755 "$dir"
-            chown pi:pi "$dir"
-        fi
+    
+    # Install in each environment
+    for env in "system" "klippy" "moonraker"; do
+        log_message "INFO" "Installing in $env environment..."
+        case $env in
+            "system")
+                pip3 install -r "$req_file"
+                ;;
+            "klippy")
+                "${KLIPPY_ENV}/bin/pip" install -r "$req_file"
+                ;;
+            "moonraker")
+                "${MOONRAKER_ENV}/bin/pip" install -r "$req_file"
+                ;;
+        esac
     done
 }
 
-# Function to install Git LFS (install only)
-install_git_lfs() {
-    log_message "INFO" "Installing Git LFS"
-    if ! command -v git-lfs &> /dev/null; then
-        apt-get update && apt-get install -y git-lfs || {
-            log_message "ERROR" "Failed to install Git LFS"
-            exit 1
-        }
-        log_message "INFO" "Git LFS installed successfully"
-    else
-        log_message "INFO" "Git LFS is already installed"
-    fi
-
-    # Initialize Git LFS
-    git lfs install || {
-        log_message "ERROR" "Failed to initialize Git LFS"
-        exit 1
-    }
-    log_message "INFO" "Git LFS initialized successfully"
-}
-
-# Function to handle existing repository
-handle_existing_repo() {
-    local name=$1
-    local repo_dir=$2
+# Function to sync config files
+sync_config_files() {
+    log_message "INFO" "Syncing configuration files..."
     
-    log_message "INFO" "Handling existing repository: $name"
+    # Create required directories
+    mkdir -p "$PRINTABLES_INSTALL_DIR"
     
-    # Backup any local changes
-    if [ -d "$repo_dir" ]; then
-        (cd "$repo_dir" && {
-            git reset --hard
-            git clean -fd
-            git fetch origin
-            git checkout -f main
-            git reset --hard origin/main
-        }) || {
-            log_message "ERROR" "Failed to reset existing repository $name"
-            return 1
-        }
-        
-        handle_repo_scripts "$name" "$repo_dir" || return 1
-        REPO_STATUS[$name]="SUCCESS"
-        return 0
-    fi
-    return 1
-}
-
-# Function to handle new repository
-handle_new_repo() {
-    local name=$1
-    local repo_url=$2
-    local repo_dir=$3
-    
-    log_message "INFO" "Cloning new repository: $name"
-    
-    # Ensure parent directory exists
-    mkdir -p "$(dirname "$repo_dir")"
-    
-    # Clone the repository
-    git clone "$repo_url" "$repo_dir" || {
-        log_message "ERROR" "Failed to clone repository $name"
+    # Sync printables
+    if ! rsync -av --delete "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/"; then
+        log_error "Failed to sync printables files"
         return 1
     }
     
-    # Initialize and update submodules if any
-    (cd "$repo_dir" && git submodule update --init --recursive) || {
-        log_message "ERROR" "Failed to initialize submodules for $name"
+    # Verify file copying
+    local source_count=$(find "${PRINTABLES_DIR}/gcodes/" -type f -name "*.gcode" | wc -l)
+    local dest_count=$(find "$PRINTABLES_INSTALL_DIR" -type f -name "*.gcode" | wc -l)
+    
+    if [ "$source_count" -ne "$dest_count" ]; then
+        log_error "File count mismatch after sync"
         return 1
     }
     
-    handle_repo_scripts "$name" "$repo_dir" || return 1
-    REPO_STATUS[$name]="SUCCESS"
+    log_message "INFO" "Successfully synced $source_count gcode files"
     return 0
 }
 
-# Function to handle repository operations
-handle_repository() {
-    local name=$1
-    local repo_info=${REPOS[$name]}
-    local repo_url=${repo_info%:*}
-    local repo_dir=${repo_info##*:}
-    local retry_count=0
+# Function to setup symlinks
+setup_symlinks() {
+    log_message "INFO" "Setting up component symlinks..."
+    
+    # Numpad macros links
+    ln -sf "${NUMPAD_DIR}/extras/numpad_event_service.py" \
+        "${KLIPPER_DIR}/klippy/extras/numpad_event_service.py"
+    ln -sf "${NUMPAD_DIR}/components/numpad_macros.py" \
+        "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py"
+    
+    # Sound system links
+    ln -sf "${SOUND_DIR}/extras/sound_system.py" \
+        "${KLIPPER_DIR}/klippy/extras/sound_system.py"
+    ln -sf "${SOUND_DIR}/components/sound_system_service.py" \
+        "${MOONRAKER_DIR}/moonraker/components/sound_system_service.py"
+}
 
-    log_message "INFO" "Processing repository: $name"
-    log_message "INFO" "URL: $repo_url"
-    log_message "INFO" "Directory: $repo_dir"
-
-    # Store original HEAD if repository exists
-    local original_head=""
-    [ -d "$repo_dir/.git" ] && original_head=$(cd "$repo_dir" && git rev-parse HEAD)
-
-    if [ "$MODE" = "install" ]; then
-        # Installation logic with retry
-        while [ $retry_count -lt $RETRY_LIMIT ]; do
-            if [ -d "$repo_dir/.git" ]; then
-                handle_existing_repo "$name" "$repo_dir" && return 0
-            fi
-            handle_new_repo "$name" "$repo_url" "$repo_dir" && return 0
-            
-            retry_count=$((retry_count + 1))
-            [ $retry_count -lt $RETRY_LIMIT ] && sleep 5
-        done
-        REPO_STATUS[$name]="FAILED"
+# Function to setup services
+setup_services() {
+    log_message "INFO" "Setting up services..."
+    
+    # Load required kernel module
+    modprobe uinput
+    
+    # Add module to load at boot
+    if ! grep -q "uinput" /etc/modules; then
+        echo "uinput" >> /etc/modules
+    fi
+    
+    # Setup numpad event service
+    ln -sf "$SERVICE_FILE" \
+        "/etc/systemd/system/numpad_event_service.service"
+    
+    systemctl daemon-reload
+    systemctl enable numpad_event_service.service
+    
+    # Verify setup
+    verify_numpad_setup || {
+        log_error "Numpad setup verification failed"
         return 1
-    else
-        # Refresh logic
-        if [ ! -d "$repo_dir/.git" ]; then
-            REPO_STATUS[$name]="MISSING"
-            UPDATE_STATUS[$name]="NONE"
-            return 1
-        fi
-        
-        # Force reset any local changes before updating
-        (cd "$repo_dir" && {
-            git reset --hard
-            git clean -fd
-            git fetch origin
-            git checkout -f main
-            git reset --hard origin/main
-        }) || {
-            REPO_STATUS[$name]="UPDATE_FAILED"
-            UPDATE_STATUS[$name]="ERROR"
-            return 1
-        }
-        
-        local new_head=$(cd "$repo_dir" && git rev-parse HEAD)
-        
-        if [ "$original_head" != "$new_head" ]; then
-            UPDATE_STATUS[$name]="UPDATED"
-            REPO_STATUS[$name]="UPDATED"
-        else
-            UPDATE_STATUS[$name]="UNCHANGED"
-            REPO_STATUS[$name]="CURRENT"
-        fi
-        return 0
-    fi
+    }
 }
 
-# Function to handle repository scripts
-handle_repo_scripts() {
-    local name=$1
-    local repo_dir=$2
-
-    # Check for and run install/refresh script
-    local script_name="${MODE}.sh"
-    local script_path="$repo_dir/$script_name"
+# Function to setup cron jobs
+setup_cron_jobs() {
+    log_message "INFO" "Setting up cron jobs..."
     
-    if [ -f "$script_path" ]; then
-        log_message "INFO" "Running $script_name for $name"
-        if $script_path; then
-            REPO_STATUS[$name]="SUCCESS"
-            fix_repo_permissions "$repo_dir"
-        else
-            REPO_STATUS[$name]="FAILED_SCRIPT"
-            log_message "ERROR" "$script_name failed for $name"
-            fix_repo_permissions "$repo_dir"
-            return 1
-        fi
-    fi
-
-    # Check for requirements.txt and install if present
-    local req_file="$repo_dir/requirements.txt"
-    if [ -f "$req_file" ]; then
-        log_message "INFO" "Installing Python requirements for $name"
-        if ! pip3 install -r "$req_file"; then
-            log_message "ERROR" "Failed to install Python requirements for $name"
-            REPO_STATUS[$name]="FAILED_REQUIREMENTS"
-            return 1
-        fi
-    fi
-
-    return 0
+    if ! python3 "$CRON_SETUP_SCRIPT"; then
+        log_error "Failed to setup cron job"
+        return 1
+    }
+    
+    log_message "INFO" "Cron jobs setup successfully"
 }
 
-# Function to fix repository permissions
-fix_repo_permissions() {
-    local repo_dir=$1
+# Function to update metadata
+update_metadata() {
+    log_message "INFO" "Updating printables metadata..."
     
-    # First, set all directories to 755
-    find "$repo_dir" -type d -exec chmod 755 {} \;
+    if ! python3 "$METADATA_SCRIPT"; then
+        log_error "Failed to update metadata"
+        return 1
+    }
     
-    # Set all files to 644 by default
-    find "$repo_dir" -type f -exec chmod 644 {} \;
-    
-    # Only if it's a git repository
-    if [ -d "$repo_dir/.git" ]; then
-        (cd "$repo_dir" && {
-            # Make sure we're on the right branch
-            git checkout -f main
-            
-            # Set executable bit only for files marked as executable in .gitattributes
-            git ls-files --stage | while read mode hash stage file; do
-                if [ "$mode" = "100755" ]; then
-                    chmod +x "$file"
-                fi
-            done
-        })
-    fi
-
-    # Explicitly ensure our scripts are executable
-    if [ -f "$repo_dir/install.sh" ]; then
-        log_message "INFO" "Making install.sh executable in $repo_dir"
-        chmod +x "$repo_dir/install.sh"
-    fi
-    if [ -f "$repo_dir/refresh.sh" ]; then
-        log_message "INFO" "Making refresh.sh executable in $repo_dir"
-        chmod +x "$repo_dir/refresh.sh"
-    fi
-    if [ -f "$repo_dir/lister.sh" ]; then
-        log_message "INFO" "Making lister.sh executable in $repo_dir"
-        chmod +x "$repo_dir/lister.sh"
-    fi
-    
-    # Set ownership after all permission changes
-    chown -R pi:pi "$repo_dir"
-}
-
-# Function to check service status
-check_services() {
-    local services=(
-        "klipper"
-        "moonraker"
-        "numpad_event_service"
-    )
-
-    for service in "${services[@]}"; do
-        if systemctl is-active --quiet "$service"; then
-            SERVICE_STATUS[$service]="RUNNING"
-            log_message "INFO" "Service $service is running"
-        else
-            SERVICE_STATUS[$service]="STOPPED"
-            log_message "ERROR" "Service $service is not running"
-            
-            # Attempt to restart service in refresh mode
-            if [ "$MODE" = "refresh" ]; then
-                log_message "INFO" "Attempting to restart $service"
-                systemctl restart "$service"
-                sleep 2
-                if systemctl is-active --quiet "$service"; then
-                    SERVICE_STATUS[$service]="RESTARTED"
-                    log_message "INFO" "Successfully restarted $service"
-                else
-                    log_message "ERROR" "Failed to restart $service"
-                fi
-            fi
-        fi
-    done
-
-    # Check cron job for lister_printables
-    if crontab -u pi -l 2>/dev/null | grep -q "update_lister_metadata.py"; then
-        SERVICE_STATUS["printables_cron"]="CONFIGURED"
-        log_message "INFO" "Printables cron job is configured"
-    else
-        SERVICE_STATUS["printables_cron"]="MISSING"
-        log_message "ERROR" "Printables cron job is missing"
-    fi
+    log_message "INFO" "Metadata updated successfully"
 }
 
 # Function to fix permissions
 fix_permissions() {
-    log_message "INFO" "Running final permission check for all components"
-
-    for repo_info in "${REPOS[@]}"; do
-        local repo_dir=${repo_info##*:}
-        if [ -d "$repo_dir" ]; then
-            log_message "INFO" "Final permission check for $repo_dir"
-            fix_repo_permissions "$repo_dir"
-        fi
-    done
-
-    # Fix config and log directories without recursive permission change
-    log_message "INFO" "Fixing permissions for config and log directories"
-    # Set directory permissions first
-    chmod 755 "$CONFIG_DIR" "$LOG_DIR"
+    log_message "INFO" "Setting permissions..."
+    
+    # Add user pi to input group
+    usermod -a -G input pi
+    
+    # Fix directory permissions
+    find "$LISTER_CONFIG_DIR" -type d -exec chmod 755 {} \;
+    find "$LISTER_CONFIG_DIR" -type f -exec chmod 644 {} \;
+    
+    # Make scripts executable
+    chmod +x "${LISTER_CONFIG_DIR}/lister.sh"
+    chmod +x "${PRINTABLES_DIR}/scripts/"*.py
+    chmod +x "${PRINTABLES_DIR}/scripts/"*.sh
     
     # Set ownership
-    chown pi:pi "$CONFIG_DIR" "$LOG_DIR"
+    chown -R pi:pi "$LISTER_CONFIG_DIR"
+    chown -R pi:pi "$CONFIG_DIR"
+    chown -R pi:pi "$LOG_DIR"
+    chown -R pi:pi "$PRINTABLES_INSTALL_DIR"
     
-    # Handle files in these directories without making them executable
-    find "$CONFIG_DIR" "$LOG_DIR" -type f -exec chown pi:pi {} \; -exec chmod 644 {} \;
-    find "$CONFIG_DIR" "$LOG_DIR" -type d -exec chown pi:pi {} \; -exec chmod 755 {} \;
+    # Fix symlink permissions
+    chown -h pi:pi "${KLIPPER_DIR}/klippy/extras/"*.py
+    chown -h pi:pi "${MOONRAKER_DIR}/moonraker/components/"*.py
 }
 
-# Function to print status report
-print_report() {
-    log_message "INFO" "${MODE^} Status Report"
-    echo "----------------------------------------"
-    echo "Repository Status:"
-    for repo in "${!REPO_STATUS[@]}"; do
-        local status=${REPO_STATUS[$repo]}
-        local update=${UPDATE_STATUS[$repo]}
-        local color=$GREEN
-        [[ $status != "SUCCESS" ]] && color=$RED
-        if [ "$MODE" = "refresh" ]; then
-            echo -e "${color}$repo: $status ($update)${NC}"
+# Function to restart services
+restart_services() {
+    log_message "INFO" "Restarting services..."
+    
+    systemctl restart klipper
+    sleep 2
+    systemctl restart moonraker
+    sleep 2
+    systemctl restart numpad_event_service
+}
+
+# Function to verify services
+verify_services() {
+    local all_good=true
+
+    for service in klipper moonraker numpad_event_service; do
+        if ! systemctl is-active --quiet "$service"; then
+            log_error "$service failed to start"
+            all_good=false
         else
-            echo -e "${color}$repo: $status${NC}"
+            SERVICE_STATUS[$service]="RUNNING"
+            log_message "INFO" "$service is running"
         fi
     done
 
-    echo -e "\nService Status:"
-    for service in "${!SERVICE_STATUS[@]}"; do
-        local status=${SERVICE_STATUS[$service]}
-        local color=$GREEN
-        [[ $status != "RUNNING" && $status != "RESTARTED" && $status != "CONFIGURED" ]] && color=$RED
-        echo -e "${color}$service: $status${NC}"
-    done
-    echo "----------------------------------------"
+    return $([ "$all_good" = true ])
+}
+
+# Function to update repository with LFS support
+update_repo() {
+    log_message "INFO" "Updating repository with LFS files..."
+    
+    cd "$LISTER_CONFIG_DIR" || {
+        log_error "Failed to change to repository directory"
+        return 1
+    }
+    
+    # Setup and fetch LFS files
+    git lfs install
+    log_message "INFO" "Fetching LFS files..."
+    git lfs fetch --all
+    git lfs checkout
+    
+    # Clean and update repository
+    git reset --hard
+    git clean -fd
+    git pull --force origin main
+    
+    log_message "INFO" "Repository update completed"
+    return 0
+}
+
+# Function to verify numpad setup
+verify_numpad_setup() {
+    log_message "INFO" "Verifying numpad setup..."
+    
+    # Check input group
+    if ! groups pi | grep -q "input"; then
+        log_error "User 'pi' not in input group"
+        return 1
+    }
+    
+    # Check keyboard module
+    if ! lsmod | grep -q "uinput"; then
+        log_error "Required kernel module 'uinput' not loaded"
+        return 1
+    }
+    
+    # Verify service file
+    if [ ! -L "/etc/systemd/system/numpad_event_service.service" ]; then
+        log_error "Numpad service symlink not found"
+        return 1
+    }
+    
+    # Check component installation
+    if [ ! -L "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py" ]; then
+        log_error "Numpad component not installed"
+        return 1
+    }
+    
+    # Verify log file setup
+    local numpad_log="/home/pi/printer_data/logs/numpad_event_service.log"
+    if [ ! -f "$numpad_log" ]; then
+        touch "$numpad_log"
+        chown pi:pi "$numpad_log"
+        chmod 644 "$numpad_log"
+    }
+    
+    return 0
+}
+
+# Function to verify sound system
+verify_sound_setup() {
+    log_message "INFO" "Verifying sound system setup..."
+    
+    # Check audio tools
+    for cmd in aplay amixer mpv; do
+        if ! command -v $cmd &> /dev/null; then
+            log_error "Required command not found: $cmd"
+            return 1
+        fi
+    }
+    
+    # Check audio device
+    if ! aplay -l | grep -q "card"; then
+        log_error "No audio devices found"
+        return 1
+    }
+    
+    # Check sound directories
+    local sound_dirs=(
+        "$SOUND_FILES_DIR"
+        "$SOUND_MP3_DIR"
+        "$SOUND_WAV_DIR"
+    )
+    
+    for dir in "${sound_dirs[@]}"; do
+        if [ ! -d "$dir" ]; then
+            log_error "Sound directory not found: $dir"
+            return 1
+        fi
+    }
+    
+    # Check for sound files
+    if [ -z "$(ls -A $SOUND_MP3_DIR)" ]; then
+        log_warning "No MP3 files found in sounds directory"
+    fi
+    
+    # Check component symlinks
+    if [ ! -L "${KLIPPER_DIR}/klippy/extras/sound_system.py" ]; then
+        log_error "Sound system Klipper component not linked"
+        return 1
+    }
+    
+    if [ ! -L "${MOONRAKER_DIR}/moonraker/components/sound_system_service.py" ]; then
+        log_error "Sound system Moonraker component not linked"
+        return 1
+    }
+    
+    # Test audio system
+    if ! amixer sget 'PCM' &> /dev/null; then
+        log_error "Unable to access audio mixer"
+        return 1
+    }
+    
+    return 0
+}
+
+# Function to setup sound system
+setup_sound_system() {
+    log_message "INFO" "Setting up sound system..."
+    
+    # Create sound directories
+    mkdir -p "$SOUND_WAV_DIR"
+    mkdir -p "$SOUND_MP3_DIR"
+    
+    # Set permissions
+    chown -R pi:pi "$SOUND_FILES_DIR"
+    find "$SOUND_FILES_DIR" -type d -exec chmod 755 {} \;
+    find "$SOUND_FILES_DIR" -type f -exec chmod 644 {} \;
+    
+    # Set initial volume
+    if amixer sget 'PCM' &> /dev/null; then
+        amixer -M sset 'PCM' 75%
+        log_message "INFO" "Set initial volume to 75%"
+    fi
+    
+    # Verify setup
+    verify_sound_setup || {
+        log_error "Sound system verification failed"
+        return 1
+    }
 }
 
 # Main process
 main() {
     check_root
     verify_script_location
-    setup_repositories
     
     log_message "INFO" "Starting Lister configuration ${MODE}"
-
-    # Configure Git settings
-    configure_git
-
-    # Installation-specific tasks
+    
     if [ "$MODE" = "install" ]; then
-        create_directories
-        install_git_lfs
-    fi
-
-    # Process repositories
-    if [ "$MODE" = "refresh" ]; then
-        # Handle lister_config first in refresh mode
-        handle_repository "lister_config" || {
-            log_message "ERROR" "Failed to update lister_config repository. Aborting."
+        install_system_deps
+        install_python_deps
+        setup_services || {
+            log_error "Service setup failed"
+            exit 1
+        }
+        setup_sound_system || {
+            log_error "Sound system setup failed"
+            exit 1
+        }
+        verify_printables_setup || {
+            log_error "Printables verification failed"
+            exit 1
+        }
+        setup_cron_jobs || {
+            log_error "Cron setup failed"
+            exit 1
+        }
+    else
+        # Update repository in refresh mode
+        update_repo || {
+            log_error "Failed to update repository"
             exit 1
         }
     fi
-
-    # Process remaining repositories
-    for repo in "${!REPOS[@]}"; do
-        [ "$MODE" = "refresh" ] && [ "$repo" = "lister_config" ] && continue
-        handle_repository "$repo"
-    done
-
+    
+    sync_config_files || {
+        log_error "Config sync failed"
+        exit 1
+    }
+    setup_symlinks
     fix_permissions
-    check_services
-    print_report
-
-    # Final check to ensure lister.sh remains executable
-    if [ -f "$EXPECTED_SCRIPT_PATH" ]; then
-        log_message "INFO" "Ensuring lister.sh remains executable"
-        chmod +x "$EXPECTED_SCRIPT_PATH"
-    fi
-
+    update_metadata || {
+        log_error "Metadata update failed"
+        exit 1
+    }
+    restart_services
+    verify_services
+    
     log_message "INFO" "${MODE^} complete"
 }
 

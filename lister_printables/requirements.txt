@@ -1,3 +1,0 @@
-# Install probable requirements
-python-crontab==2.7.1
-requests~=2.32.3

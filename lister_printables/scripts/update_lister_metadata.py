@@ -14,7 +14,6 @@ GCODES_ROOT = "/home/pi/printer_data/gcodes"
 MAX_RETRIES = 30
 RETRY_DELAY = 10  # seconds
 
-
 def setup_logging():
     try:
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
