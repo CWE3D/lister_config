@@ -526,6 +526,23 @@ verify_script_location() {
     fi
 }
 
+# Function to restart all services
+restart_all_services() {
+    log_message "INFO" "Restarting all services..." "INSTALL"
+    
+    # List of services to restart
+    local services=("klipper" "moonraker" "numpad_event_service")
+    
+    for service in "${services[@]}"; do
+        systemctl restart "$service"
+        if systemctl is-active --quiet "$service"; then
+            log_message "INFO" "$service restarted successfully" "INSTALL"
+        else
+            log_message "ERROR" "$service failed to restart" "INSTALL"
+        fi
+    done
+}
+
 # Main process
 main() {
     check_root
@@ -582,6 +599,10 @@ main() {
             log_message "INFO" "Sync complete" "INSTALL"
             exit 0
             ;;
+        "restart")
+            restart_all_services
+            exit 0
+            ;;
     esac
     
     # Common operations for install and refresh
@@ -602,12 +623,12 @@ main() {
 
 # Script entry point
 case "$1" in
-    "install"|"refresh"|"sync")
+    "install"|"refresh"|"sync"|"restart")
         MODE="$1"
         main
         ;;
     *)
-        echo "Usage: $0 {install|refresh|sync}"
+        echo "Usage: $0 {install|refresh|sync|restart}"
         exit 1
         ;;
 esac
