@@ -71,7 +71,7 @@ verify_printables_setup() {
         fi
         # Make script executable
         chmod +x "$script"
-    }
+    done
     
     # Verify cron job
     if ! crontab -l -u pi | grep -q "$METADATA_SCRIPT"; then
@@ -394,7 +394,7 @@ verify_sound_setup() {
             log_error "Sound directory not found: $dir" "INSTALL"
             return 1
         fi
-    }
+    done
     
     # Check for sound files
     if [ -z "$(ls -A $SOUND_MP3_DIR)" ]; then
