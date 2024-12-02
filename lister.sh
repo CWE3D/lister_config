@@ -37,7 +37,10 @@ PRINTABLES_SCRIPTS_DIR="${PRINTABLES_DIR}/scripts"
 METADATA_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/update_lister_metadata.py"
 UPDATE_CLIENT_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/update_client.py"
 
-# Add function to verify printables setup
+# At the top with other variables
+SKIP_METADATA=true  # Default to skipping metadata scan
+
+# Function to verify printables setup
 verify_printables_setup() {
     log_message "INFO" "Verifying printables setup..." "INSTALL"
     
@@ -539,10 +542,16 @@ main() {
     }
     setup_symlinks
     fix_permissions
-    update_metadata || {
-        log_message "ERROR" "Metadata update failed" "INSTALL"
-        exit 1
-    }
+    
+    if [ "$SKIP_METADATA" = false ]; then
+        update_metadata || {
+            log_message "ERROR" "Metadata update failed" "INSTALL"
+            exit 1
+        }
+    else
+        log_message "INFO" "Skipping metadata scan (will run via cron job)" "INSTALL"
+    fi
+    
     restart_services
     verify_services
     
@@ -553,10 +562,16 @@ main() {
 case "$1" in
     "install"|"refresh")
         MODE="$1"
+        SKIP_METADATA=true
+        main
+        ;;
+    "install-with-metadata"|"refresh-with-metadata")
+        MODE="${1%-with-metadata}"  # Remove '-with-metadata' suffix
+        SKIP_METADATA=false
         main
         ;;
     *)
-        echo "Usage: $0 {install|refresh}"
+        echo "Usage: $0 {install|refresh|install-with-metadata|refresh-with-metadata}"
         exit 1
         ;;
 esac
