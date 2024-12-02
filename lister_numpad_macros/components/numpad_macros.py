@@ -60,19 +60,19 @@ class NumpadMacros:
 
         # Add configuration for probe adjustments
         self.probe_min_step = config.getfloat(
-            'probe_min_step', 0.025, above=0.1, below=1.
+            'probe_min_step', 0.025, above=0., below=0.1
         )
         self.probe_coarse_multiplier = config.getfloat(
-            'probe_coarse_multiplier', 0.5, above=0.1, below=1.
+            'probe_coarse_multiplier', 0.5, above=0., below=1.
         )
         self.probe_fine_multiplier = config.getfloat(
-            'probe_fine_multiplier', 0.5, above=0.1, below=1.
+            'probe_fine_multiplier', 0.4, above=0., below=1.
         )
         self.probe_fine_min_step = config.getfloat(
-            'probe_fine_min_step', 0.025, above=0.1, below=1.
+            'probe_fine_min_step', 0.015, above=0., below=0.1
         )
         self.fine_tune_from = config.getfloat(
-            'fine_tune_from', -0.2, above=-1., below=1.
+            'fine_tune_from', 0.15, above=0., below=1.
         )
 
         # Define default no-confirm and confirmation keys
