@@ -162,16 +162,30 @@ sync_with_check() {
         local src_dir=$(dirname "$src")
         local pattern=$(basename "$src")
         
-        # For each matching file
-        for file in $src_dir/$pattern; do
-            [ -e "$file" ] || continue  # Skip if no matches
+        # Use nullglob to handle no matches gracefully
+        shopt -s nullglob
+        local files=("$src_dir"/$pattern)
+        shopt -u nullglob
+        
+        if [ ${#files[@]} -eq 0 ]; then
+            log_message "INFO" "No files found matching pattern: $pattern" "INSTALL"
+            return 0
+        fi
+        
+        # Process each matching file
+        for file in "${files[@]}"; do
+            if [ ! -f "$file" ]; then
+                continue
+            fi
             
-            local dst_file="${dst}/$(basename "$file")"
+            local base_name=$(basename "$file")
+            local dst_file="$dst/$base_name"
+            
             if needs_update "$file" "$dst_file"; then
-                log_message "INFO" "Updating ${desc}: $(basename "$file")" "INSTALL"
+                log_message "INFO" "Updating ${desc}: $base_name" "INSTALL"
                 cp -p "$file" "$dst/" || return 1
             else
-                log_message "INFO" "File up to date: $(basename "$file")" "INSTALL"
+                log_message "INFO" "File up to date: $base_name" "INSTALL"
             fi
         done
     elif [ -d "$src" ]; then
