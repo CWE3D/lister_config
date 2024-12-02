@@ -35,7 +35,6 @@ declare -A SERVICE_STATUS
 # Define paths
 PRINTABLES_SCRIPTS_DIR="${PRINTABLES_DIR}/scripts"
 METADATA_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/update_lister_metadata.py"
-CRON_SETUP_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/setup_one_time_cron.py"
 UPDATE_CLIENT_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/update_client.py"
 
 # Add function to verify printables setup
@@ -63,7 +62,6 @@ verify_printables_setup() {
     # Check required scripts
     local required_scripts=(
         "$METADATA_SCRIPT"
-        "$CRON_SETUP_SCRIPT"
         "$UPDATE_CLIENT_SCRIPT"
     )
     
