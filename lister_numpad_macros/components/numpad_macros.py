@@ -47,7 +47,13 @@ class NumpadMacros:
             "max": 300,
             "min": 20
         }
-        self.speed_settings = config.getdict('speed_settings', default=default_speed_settings)
+
+        # Build speed settings from individual values
+        self.speed_settings = {
+            "increment": config.getint('speed_settings_increment', default_speed_settings["increment"]),
+            "max": config.getint('speed_settings_max', default_speed_settings["max"]),
+            "min": config.getint('speed_settings_min', default_speed_settings["min"])
+        }
 
         if self.debug_log:
             self.logger.debug(f"Loaded speed settings: {self.speed_settings}")

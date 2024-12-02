@@ -262,6 +262,22 @@ restart_services() {
 verify_services() {
     local all_good=true
 
+    # Check numpad component
+    if [ ! -L "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py" ]; then
+        log_message "ERROR" "Numpad Moonraker component not installed" "INSTALL"
+        all_good=false
+    else
+        # Also verify the symlink points to the correct file
+        local target=$(readlink -f "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py")
+        local expected="${NUMPAD_DIR}/components/numpad_macros.py"
+        if [ "$target" != "$expected" ]; then
+            log_message "ERROR" "Numpad component symlink points to wrong location: $target" "INSTALL"
+            all_good=false
+        else
+            log_message "INFO" "Numpad Moonraker component is installed correctly" "INSTALL"
+        fi
+    fi
+
     # Check z_force_move component
     if [ ! -L "${KLIPPER_DIR}/klippy/extras/z_force_move.py" ]; then
         log_message "ERROR" "Z Force Move component not installed" "INSTALL"
