@@ -150,25 +150,35 @@ sync_config_files() {
             return 1
         fi
 
-        # Get destination full path including filename
-        local dst_file="${dst}/$(basename "$src")"
-        
-        # If destination doesn't exist, we need to copy
-        if [ ! -e "$dst_file" ]; then
-            log_message "INFO" "Destination file doesn't exist, copying ${desc}..." "INSTALL"
-            rsync -av "$src" "$dst" || return 1
-            return 0
-        fi
-
-        # Compare modification times and checksums
-        if [ "$src" -nt "$dst_file" ] || ! cmp -s "$src" "$dst_file"; then
-            log_message "INFO" "Changes detected in ${desc}, syncing..." "INSTALL"
+        # Handle directory syncs differently from single files
+        if [[ $src == *"*"* ]]; then
+            # This is a wildcard sync (directory with pattern)
             if ! rsync -av --update "$src" "$dst"; then
                 log_message "ERROR" "Failed to sync ${desc}" "INSTALL"
                 return 1
             fi
         else
-            log_message "INFO" "No changes detected in ${desc}" "INSTALL"
+            # Single file sync
+            # Get destination full path including filename
+            local dst_file="${dst}/$(basename "$src")"
+            
+            # If destination doesn't exist, we need to copy
+            if [ ! -e "$dst_file" ]; then
+                log_message "INFO" "Destination file doesn't exist, copying ${desc}..." "INSTALL"
+                rsync -av "$src" "$dst" || return 1
+                return 0
+            fi
+
+            # Compare modification times and checksums
+            if [ "$src" -nt "$dst_file" ] || ! cmp -s "$src" "$dst_file"; then
+                log_message "INFO" "Changes detected in ${desc}, syncing..." "INSTALL"
+                if ! rsync -av --update "$src" "$dst"; then
+                    log_message "ERROR" "Failed to sync ${desc}" "INSTALL"
+                    return 1
+                fi
+            else
+                log_message "INFO" "No changes detected in ${desc}" "INSTALL"
+            fi
         fi
         
         return 0
