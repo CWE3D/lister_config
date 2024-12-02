@@ -181,6 +181,10 @@ setup_symlinks() {
         "${KLIPPER_DIR}/klippy/extras/sound_system.py"
     ln -sf "${SOUND_DIR}/components/sound_system_service.py" \
         "${MOONRAKER_DIR}/moonraker/components/sound_system_service.py"
+        
+    # Z Force Move link
+    ln -sf "${LISTER_CONFIG_DIR}/extras/z_force_move.py" \
+        "${KLIPPER_DIR}/klippy/extras/z_force_move.py"
 }
 
 # Function to setup services
@@ -226,6 +230,7 @@ fix_permissions() {
     # Make scripts executable
     chmod +x "${LISTER_CONFIG_DIR}/lister.sh"
     chmod +x "${PRINTABLES_DIR}/scripts/"*.py
+    chmod +x "${LISTER_CONFIG_DIR}/extras/z_force_move.py"  # Make z_force_move executable
     
     # Set ownership
     chown -R pi:pi "$LISTER_CONFIG_DIR"
@@ -252,6 +257,14 @@ restart_services() {
 # Function to verify services
 verify_services() {
     local all_good=true
+
+    # Check z_force_move component
+    if [ ! -L "${KLIPPER_DIR}/klippy/extras/z_force_move.py" ]; then
+        log_message "ERROR" "Z Force Move component not installed" "INSTALL"
+        all_good=false
+    else
+        log_message "INFO" "Z Force Move component is installed" "INSTALL"
+    fi
 
     for service in klipper moonraker numpad_event_service; do
         if ! systemctl is-active --quiet "$service"; then
