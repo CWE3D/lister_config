@@ -126,31 +126,6 @@ install_python_deps() {
     done
 }
 
-# Function to check if file needs updating
-needs_update() {
-    local src="$1"
-    local dst="$2"
-    
-    # If destination doesn't exist, needs update
-    if [ ! -e "$dst" ]; then
-        return 0  # true, needs update
-    fi
-    
-    # Compare sizes
-    local src_size=$(stat -c%s "$src")
-    local dst_size=$(stat -c%s "$dst")
-    if [ "$src_size" != "$dst_size" ]; then
-        return 0  # true, needs update
-    fi
-    
-    # Compare modification times
-    if [ "$src" -nt "$dst" ]; then
-        return 0  # true, needs update
-    fi
-    
-    return 1  # false, no update needed
-}
-
 # Function to sync with rsync
 sync_with_rsync() {
     local src="$1"
@@ -611,6 +586,15 @@ main() {
             restart_all_services
             exit 0
             ;;
+        "permissions")
+            fix_permissions
+            log_message "INFO" "Permissions reset complete" "INSTALL"
+            exit 0
+            ;;
+        *)
+            echo "Usage: $0 {install|refresh|sync|restart|permissions}"
+            exit 1
+            ;;
     esac
     
     # Common operations for install and refresh
@@ -631,12 +615,15 @@ main() {
 
 # Script entry point
 case "$1" in
-    "install"|"refresh"|"sync"|"restart")
+    "install"|"refresh"|"sync"|"restart"|"permissions")
         MODE="$1"
         main
         ;;
     *)
-        echo "Usage: $0 {install|refresh|sync|restart}"
+        echo "Usage: $0 {install|refresh|sync|restart|permissions}"
         exit 1
         ;;
 esac
+
+# Ensure the script is executable
+chmod +x "$0"
