@@ -509,50 +509,68 @@ main() {
     
     log_message "INFO" "Starting Lister configuration ${MODE}" "INSTALL"
     
-    if [ "$MODE" = "install" ]; then
-        install_system_deps
-        install_python_deps
-        setup_services || {
-            log_message "ERROR" "Service setup failed" "INSTALL"
+    case "$MODE" in
+        "install")
+            install_system_deps
+            install_python_deps
+            setup_services || {
+                log_message "ERROR" "Service setup failed" "INSTALL"
+                exit 1
+            }
+            setup_sound_system || {
+                log_message "ERROR" "Sound system setup failed" "INSTALL"
+                exit 1
+            }
+            verify_printables_setup || {
+                log_message "ERROR" "Printables verification failed" "INSTALL"
+                exit 1
+            }
+            ;;
+        "refresh")
+            # Update repository in refresh mode
+            update_repo || {
+                log_message "ERROR" "Failed to update repository" "INSTALL"
+                exit 1
+            }
+            ;;
+        "sync")
+            # Only sync files and fix permissions
+            log_message "INFO" "Syncing files only..." "INSTALL"
+            sync_config_files || {
+                log_message "ERROR" "Config sync failed" "INSTALL"
+                exit 1
+            }
+            setup_symlinks
+            fix_permissions
+            log_message "INFO" "Sync complete" "INSTALL"
+            exit 0
+            ;;
+    esac
+    
+    # Common operations for install and refresh
+    if [ "$MODE" != "sync" ]; then
+        sync_config_files || {
+            log_message "ERROR" "Config sync failed" "INSTALL"
             exit 1
         }
-        setup_sound_system || {
-            log_message "ERROR" "Sound system setup failed" "INSTALL"
-            exit 1
-        }
-        verify_printables_setup || {
-            log_message "ERROR" "Printables verification failed" "INSTALL"
-            exit 1
-        }
-    else
-        # Update repository in refresh mode
-        update_repo || {
-            log_message "ERROR" "Failed to update repository" "INSTALL"
-            exit 1
-        }
+        setup_symlinks
+        fix_permissions
+        
+        restart_services
+        verify_services
+        
+        log_message "INFO" "${MODE^} complete" "INSTALL"
     fi
-    
-    sync_config_files || {
-        log_message "ERROR" "Config sync failed" "INSTALL"
-        exit 1
-    }
-    setup_symlinks
-    fix_permissions
-    
-    restart_services
-    verify_services
-    
-    log_message "INFO" "${MODE^} complete" "INSTALL"
 }
 
 # Script entry point
 case "$1" in
-    "install"|"refresh")
+    "install"|"refresh"|"sync")
         MODE="$1"
         main
         ;;
     *)
-        echo "Usage: $0 {install|refresh}"
+        echo "Usage: $0 {install|refresh|sync}"
         exit 1
         ;;
 esac
