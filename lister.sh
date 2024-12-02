@@ -145,39 +145,41 @@ sync_config_files() {
         local dst="$2"
         local desc="$3"
         
-        if [ ! -e "$src" ]; then
-            log_message "ERROR" "Source does not exist: $src" "INSTALL"
-            return 1
-        fi
-
-        # Handle directory syncs differently from single files
         if [[ $src == *"*"* ]]; then
-            # This is a wildcard sync (directory with pattern)
-            if ! rsync -av --update "$src" "$dst"; then
+            # This is a wildcard pattern
+            local src_dir=$(dirname "$src")
+            local pattern=$(basename "$src")
+            
+            # Check if any matching files exist
+            local matching_files=($src_dir/$pattern)
+            if [ ${#matching_files[@]} -eq 0 ] || [ ! -e "${matching_files[0]}" ]; then
+                log_message "ERROR" "No matching files found for pattern: $src" "INSTALL"
+                return 1
+            fi
+            
+            # Use rsync with --ignore-existing to prevent unnecessary copies
+            if ! rsync -av --update --ignore-existing "$src_dir"/$pattern "$dst"; then
                 log_message "ERROR" "Failed to sync ${desc}" "INSTALL"
+                return 1
+            fi
+        elif [ -d "$src" ]; then
+            # This is a directory sync
+            if ! rsync -av --update "$src/" "$dst/"; then
+                log_message "ERROR" "Failed to sync directory ${desc}" "INSTALL"
                 return 1
             fi
         else
             # Single file sync
-            # Get destination full path including filename
             local dst_file="${dst}/$(basename "$src")"
             
-            # If destination doesn't exist, we need to copy
             if [ ! -e "$dst_file" ]; then
-                log_message "INFO" "Destination file doesn't exist, copying ${desc}..." "INSTALL"
+                log_message "INFO" "Copying new file ${desc}..." "INSTALL"
                 rsync -av "$src" "$dst" || return 1
-                return 0
-            fi
-
-            # Compare modification times and checksums
-            if [ "$src" -nt "$dst_file" ] || ! cmp -s "$src" "$dst_file"; then
-                log_message "INFO" "Changes detected in ${desc}, syncing..." "INSTALL"
-                if ! rsync -av --update "$src" "$dst"; then
-                    log_message "ERROR" "Failed to sync ${desc}" "INSTALL"
-                    return 1
-                fi
+            elif [ "$src" -nt "$dst_file" ] || ! cmp -s "$src" "$dst_file"; then
+                log_message "INFO" "Updating changed file ${desc}..." "INSTALL"
+                rsync -av --update "$src" "$dst" || return 1
             else
-                log_message "INFO" "No changes detected in ${desc}" "INSTALL"
+                log_message "INFO" "File ${desc} is up to date" "INSTALL"
             fi
         fi
         
