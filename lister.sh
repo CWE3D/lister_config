@@ -34,11 +34,7 @@ declare -A SERVICE_STATUS
 
 # Define paths
 PRINTABLES_SCRIPTS_DIR="${PRINTABLES_DIR}/scripts"
-METADATA_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/update_lister_metadata.py"
 UPDATE_CLIENT_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/update_client.py"
-
-# At the top with other variables
-SKIP_METADATA=true  # Default to skipping metadata scan
 
 # Function to verify printables setup
 verify_printables_setup() {
@@ -64,7 +60,6 @@ verify_printables_setup() {
     
     # Check required scripts
     local required_scripts=(
-        "$METADATA_SCRIPT"
         "$UPDATE_CLIENT_SCRIPT"
     )
     
@@ -137,6 +132,7 @@ sync_config_files() {
     
     # Create required config directories
     mkdir -p "${CONFIG_DIR}/lister_config/macros"
+    mkdir -p "${CONFIG_DIR}/.theme"
     
     # Sync printables (only copy changed/new files)
     if ! rsync -av --update --modify-window=1 "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/"; then
@@ -159,6 +155,12 @@ sync_config_files() {
     # Sync macros directory to printer_data/config/lister_config/macros
     if ! rsync -av --update --modify-window=1 "${LISTER_CONFIG_DIR}/macros/"*.cfg "${CONFIG_DIR}/lister_config/macros/"; then
         log_message "ERROR" "Failed to sync macro config files" "INSTALL"
+        return 1
+    fi
+    
+    # Sync theme files
+    if ! rsync -av --update --modify-window=1 "${LISTER_CONFIG_DIR}/lister_theme/" "${CONFIG_DIR}/.theme/"; then
+        log_message "ERROR" "Failed to sync theme files" "INSTALL"
         return 1
     fi
     
@@ -208,47 +210,6 @@ setup_services() {
         log_message "ERROR" "Numpad setup verification failed" "INSTALL"
         return 1
     }
-}
-
-# Function to setup cron jobs
-setup_cron_jobs() {
-    log_message "INFO" "Setting up cron jobs..." "INSTALL"
-    
-    # Check if crontab command exists
-    if ! command -v crontab &> /dev/null; then
-        log_message "ERROR" "crontab command not found" "INSTALL"
-        return 1
-    fi
-    
-    # Make metadata script executable
-    chmod +x "$METADATA_SCRIPT"
-    
-    # Remove any existing metadata scan jobs
-    crontab -u pi -l | grep -v "$METADATA_SCRIPT" | crontab -u pi -
-    
-    # Add new metadata scan job (runs at 2 AM daily)
-    (crontab -u pi -l 2>/dev/null; echo "0 2 * * * $METADATA_SCRIPT") | crontab -u pi -
-    
-    # Verify cron job was added
-    if ! crontab -u pi -l | grep -q "$METADATA_SCRIPT"; then
-        log_message "ERROR" "Failed to setup cron job" "INSTALL"
-        return 1
-    fi
-    
-    log_message "INFO" "Cron job setup successfully. Metadata scan will run daily at 2:00 AM" "INSTALL"
-    return 0
-}
-
-# Function to update metadata
-update_metadata() {
-    log_message "INFO" "Updating printables metadata..." "INSTALL"
-    
-    if ! python3 "$METADATA_SCRIPT"; then
-        log_message "ERROR" "Failed to update metadata" "INSTALL"
-        return 1
-    fi
-    
-    log_message "INFO" "Metadata updated successfully" "INSTALL"
 }
 
 # Function to fix permissions
@@ -530,10 +491,6 @@ main() {
             log_message "ERROR" "Printables verification failed" "INSTALL"
             exit 1
         }
-        setup_cron_jobs || {
-            log_message "ERROR" "Cron setup failed" "INSTALL"
-            exit 1
-        }
     else
         # Update repository in refresh mode
         update_repo || {
@@ -549,15 +506,6 @@ main() {
     setup_symlinks
     fix_permissions
     
-    if [ "$SKIP_METADATA" = false ]; then
-        update_metadata || {
-            log_message "ERROR" "Metadata update failed" "INSTALL"
-            exit 1
-        }
-    else
-        log_message "INFO" "Skipping metadata scan (will run via cron job)" "INSTALL"
-    fi
-    
     restart_services
     verify_services
     
@@ -568,16 +516,10 @@ main() {
 case "$1" in
     "install"|"refresh")
         MODE="$1"
-        SKIP_METADATA=true
-        main
-        ;;
-    "install-with-metadata"|"refresh-with-metadata")
-        MODE="${1%-with-metadata}"  # Remove '-with-metadata' suffix
-        SKIP_METADATA=false
         main
         ;;
     *)
-        echo "Usage: $0 {install|refresh|install-with-metadata|refresh-with-metadata}"
+        echo "Usage: $0 {install|refresh}"
         exit 1
         ;;
 esac
