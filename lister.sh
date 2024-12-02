@@ -156,12 +156,13 @@ sync_config_files() {
     # Sync each component with change detection
     sync_with_check "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/" "printables files" || return 1
     
-    sync_with_check "${LISTER_CONFIG_DIR}/"*.cfg "${CONFIG_DIR}/" "root config files" || return 1
+    # Sync specific root config files
+    sync_with_check "${LISTER_CONFIG_DIR}/lister_printer.cfg" "${CONFIG_DIR}/" "lister_printer.cfg" || return 1
+    sync_with_check "${LISTER_CONFIG_DIR}/lister_moonraker.cfg" "${CONFIG_DIR}/" "lister_moonraker.cfg" || return 1
     
+    # Sync other config files
     sync_with_check "${LISTER_CONFIG_DIR}/config/"*.cfg "${CONFIG_DIR}/lister_config/" "lister config files" || return 1
-    
     sync_with_check "${LISTER_CONFIG_DIR}/macros/"*.cfg "${CONFIG_DIR}/lister_config/macros/" "macro config files" || return 1
-    
     sync_with_check "${LISTER_CONFIG_DIR}/lister_theme/" "${CONFIG_DIR}/.theme/" "theme files" || return 1
     
     log_message "INFO" "Config sync completed" "INSTALL"
