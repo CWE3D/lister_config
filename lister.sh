@@ -135,8 +135,8 @@ install_python_deps() {
 sync_config_files() {
     log_message "INFO" "Syncing configuration files..." "INSTALL"
     
-    # Create config destination directory
-    mkdir -p "${CONFIG_DIR}/lister_config"
+    # Create required config directories
+    mkdir -p "${CONFIG_DIR}/lister_config/macros"
     
     # Sync printables (only copy changed/new files)
     if ! rsync -av --update --modify-window=1 "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/"; then
@@ -144,12 +144,21 @@ sync_config_files() {
         return 1
     fi
     
-    # Sync config files
-    if ! rsync -av --update --modify-window=1 \
-        "${LISTER_CONFIG_DIR}"/*.cfg \
-        "${LISTER_CONFIG_DIR}/macros/"*.cfg \
-        "${CONFIG_DIR}/lister_config/"; then
-        log_message "ERROR" "Failed to sync config files" "INSTALL"
+    # Sync root config files to printer_data/config
+    if ! rsync -av --update --modify-window=1 "${LISTER_CONFIG_DIR}"/*.cfg "${CONFIG_DIR}/"; then
+        log_message "ERROR" "Failed to sync root config files" "INSTALL"
+        return 1
+    fi
+    
+    # Sync config directory to printer_data/config/lister_config
+    if ! rsync -av --update --modify-window=1 "${LISTER_CONFIG_DIR}/config/"*.cfg "${CONFIG_DIR}/lister_config/"; then
+        log_message "ERROR" "Failed to sync lister config files" "INSTALL"
+        return 1
+    fi
+    
+    # Sync macros directory to printer_data/config/lister_config/macros
+    if ! rsync -av --update --modify-window=1 "${LISTER_CONFIG_DIR}/macros/"*.cfg "${CONFIG_DIR}/lister_config/macros/"; then
+        log_message "ERROR" "Failed to sync macro config files" "INSTALL"
         return 1
     fi
     
