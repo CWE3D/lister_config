@@ -151,42 +151,21 @@ needs_update() {
     return 1  # false, no update needed
 }
 
-# Function to sync with change detection
-sync_with_check() {
+# Function to sync with rsync
+sync_with_rsync() {
     local src="$1"
     local dst="$2"
     local desc="$3"
     
-    if [ -d "$src" ]; then
-        # Handle directory sync
-        find "$src" -type f | while read -r file; do
-            local rel_path=${file#$src/}
-            local dst_file="$dst/$rel_path"
-            
-            # Ensure destination directory exists
-            mkdir -p "$(dirname "$dst_file")"
-            
-            if needs_update "$file" "$dst_file"; then
-                log_message "INFO" "Updating ${desc}: $rel_path" "INSTALL"
-                cp -p "$file" "$dst_file" || return 1
-            else
-                log_message "INFO" "File up to date: $rel_path" "INSTALL"
-            fi
-        done
-    elif [ -f "$src" ]; then
-        # Single file sync
-        local dst_file="${dst}/$(basename "$src")"
-        if needs_update "$src" "$dst_file"; then
-            log_message "INFO" "Updating ${desc}" "INSTALL"
-            cp -p "$src" "$dst_file" || return 1
-        else
-            log_message "INFO" "File up to date: ${desc}" "INSTALL"
-        fi
-    else
-        log_message "ERROR" "Source path is neither a file nor a directory: $src" "INSTALL"
-        return 1
-    fi
+    log_message "INFO" "Syncing ${desc} using rsync..." "INSTALL"
     
+    # Use rsync to sync files
+    rsync -av --update "$src" "$dst" || {
+        log_message "ERROR" "Failed to sync ${desc}" "INSTALL"
+        return 1
+    }
+    
+    log_message "INFO" "Syncing ${desc} completed" "INSTALL"
     return 0
 }
 
@@ -203,11 +182,11 @@ sync_config_files() {
     cp -f "${LISTER_CONFIG_DIR}/lister_printer.cfg" "${CONFIG_DIR}/"
     cp -f "${LISTER_CONFIG_DIR}/lister_moonraker.cfg" "${CONFIG_DIR}/"
     
-    # Sync other config files
-    sync_with_check "${LISTER_CONFIG_DIR}/config/"*.cfg "${CONFIG_DIR}/lister_config/" "lister config files" || return 1
-    sync_with_check "${LISTER_CONFIG_DIR}/macros/"*.cfg "${CONFIG_DIR}/lister_config/macros/" "macro config files" || return 1
-    sync_with_check "${LISTER_CONFIG_DIR}/lister_theme/" "${CONFIG_DIR}/.theme/" "theme files" || return 1
-    sync_with_check "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/" "printables files" || return 1
+    # Sync other config files using rsync
+    sync_with_rsync "${LISTER_CONFIG_DIR}/config/" "${CONFIG_DIR}/lister_config/" "lister config files" || return 1
+    sync_with_rsync "${LISTER_CONFIG_DIR}/macros/" "${CONFIG_DIR}/lister_config/macros/" "macro config files" || return 1
+    sync_with_rsync "${LISTER_CONFIG_DIR}/lister_theme/" "${CONFIG_DIR}/.theme/" "theme files" || return 1
+    sync_with_rsync "${PRINTABLES_DIR}/gcodes/" "$PRINTABLES_INSTALL_DIR/" "printables files" || return 1
     
     log_message "INFO" "Config sync completed" "INSTALL"
     return 0
