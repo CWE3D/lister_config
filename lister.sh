@@ -535,8 +535,15 @@ main() {
             }
             ;;
         "sync")
-            # Only sync files and fix permissions
-            log_message "INFO" "Syncing files only..." "INSTALL"
+            # Update repository first
+            log_message "INFO" "Updating repository before sync..." "INSTALL"
+            update_repo || {
+                log_message "ERROR" "Failed to update repository" "INSTALL"
+                exit 1
+            }
+            
+            # Then sync files and fix permissions
+            log_message "INFO" "Syncing files..." "INSTALL"
             sync_config_files || {
                 log_message "ERROR" "Config sync failed" "INSTALL"
                 exit 1
