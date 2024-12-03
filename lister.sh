@@ -220,21 +220,22 @@ setup_services() {
     }
 }
 
+# Function to fix script permissions
+fix_script_permissions() {
+    log_message "INFO" "Setting script permissions..." "INSTALL"
+    
+    # Make scripts executable
+    chmod +x "${LISTER_CONFIG_DIR}/lister.sh"
+    chmod +x "${LISTER_CONFIG_DIR}/cleanup.sh"
+    chmod +x "${LISTER_CONFIG_DIR}/logs.sh"
+}
+
 # Function to fix permissions
 fix_permissions() {
     log_message "INFO" "Setting permissions..." "INSTALL"
     
     # Add user pi to input group
     usermod -a -G input pi
-    
-    # Fix directory permissions
-    # find "$LISTER_CONFIG_DIR" -type d -exec chmod 755 {} \;
-    # find "$LISTER_CONFIG_DIR" -type f -exec chmod 644 {} \;
-    
-    # Make scripts executable
-    chmod +x "${LISTER_CONFIG_DIR}/lister.sh"
-    chmod +x "${PRINTABLES_DIR}/scripts/"*.py
-    chmod +x "${LISTER_CONFIG_DIR}/extras/z_force_move.py"  # Make z_force_move executable
     
     # Set ownership
     chown -R pi:pi "$LISTER_CONFIG_DIR"
@@ -245,6 +246,9 @@ fix_permissions() {
     # Fix symlink permissions
     chown -h pi:pi "${KLIPPER_DIR}/klippy/extras/"*.py
     chown -h pi:pi "${MOONRAKER_DIR}/moonraker/components/"*.py
+    
+    # Make sure scripts are executable
+    fix_script_permissions
 }
 
 # Function to restart services
@@ -343,10 +347,7 @@ verify_numpad_setup() {
     log_message "INFO" "Verifying numpad setup..." "INSTALL"
     
     # Ensure no incorrect symlink exists (remove this check as it's not a Klipper plugin)
-    if [ -L "${KLIPPER_DIR}/klippy/extras/numpad_event_service.py" ]; then
-        log_message "WARNING" "Removing incorrect numpad service symlink" "INSTALL"
-        rm -f "${KLIPPER_DIR}/klippy/extras/numpad_event_service.py"
-    fi
+    cleanup_incorrect_symlinks
     
     # Check input group
     if ! groups pi | grep -q "input"; then
@@ -533,6 +534,17 @@ restart_all_services() {
     done
 }
 
+# Function to cleanup incorrect symlinks
+cleanup_incorrect_symlinks() {
+    log_message "INFO" "Cleaning up incorrect symlinks..." "INSTALL"
+    
+    # Remove incorrect numpad service symlink if it exists in Klipper extras
+    if [ -L "${KLIPPER_DIR}/klippy/extras/numpad_event_service.py" ]; then
+        log_message "WARNING" "Removing incorrect numpad service symlink from Klipper extras" "INSTALL"
+        rm -f "${KLIPPER_DIR}/klippy/extras/numpad_event_service.py"
+    fi
+}
+
 # Main process
 main() {
     check_root
@@ -562,23 +574,23 @@ main() {
                 log_message "ERROR" "Printables verification failed" "INSTALL"
                 exit 1
             }
+            fix_script_permissions
             ;;
         "refresh")
-            # Update repository in refresh mode
             update_repo || {
                 log_message "ERROR" "Failed to update repository" "INSTALL"
                 exit 1
             }
+            cleanup_incorrect_symlinks
+            fix_script_permissions
             ;;
         "sync")
-            # Update repository first
             log_message "INFO" "Updating repository before sync..." "INSTALL"
             update_repo || {
                 log_message "ERROR" "Failed to update repository" "INSTALL"
                 exit 1
             }
             
-            # Then sync files and fix permissions
             log_message "INFO" "Syncing files..." "INSTALL"
             sync_config_files || {
                 log_message "ERROR" "Config sync failed" "INSTALL"
@@ -586,15 +598,18 @@ main() {
             }
             setup_symlinks
             fix_permissions
+            fix_script_permissions
             log_message "INFO" "Sync complete" "INSTALL"
             exit 0
             ;;
         "restart")
             restart_all_services
+            fix_script_permissions
             exit 0
             ;;
         "permissions")
             fix_permissions
+            fix_script_permissions
             log_message "INFO" "Permissions reset complete" "INSTALL"
             exit 0
             ;;
@@ -612,6 +627,7 @@ main() {
         }
         setup_symlinks
         fix_permissions
+        fix_script_permissions
         
         restart_services
         verify_services
@@ -633,4 +649,4 @@ case "$1" in
 esac
 
 # Ensure the script is executable
-chmod +x "$0"
+fix_script_permissions
