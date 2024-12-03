@@ -9,7 +9,7 @@ from typing import Dict, Optional
 
 # Configuration
 MOONRAKER_URL = "http://localhost:7125"
-LOG_FILE = "/home/pi/printer_data/logs/lister_config.log"
+LOG_FILE = "/home/pi/printer_data/logs/numpad_event_service.log"
 MAX_LOG_SIZE = 5 * 1024 * 1024  # 5 MB
 BACKUP_COUNT = 3
 

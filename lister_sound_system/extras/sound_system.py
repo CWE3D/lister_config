@@ -127,7 +127,7 @@ class SoundSystem:
         logger.setLevel(logging.INFO)
 
         # Create file handler
-        log_path = Path('/home/pi/printer_data/logs/lister_config.log')
+        log_path = Path('/home/pi/printer_data/logs/sound_system.log')
         handler = logging.FileHandler(log_path)
         handler.setFormatter(logging.Formatter(
             '%(asctime)s - %(levelname)s - [%(name)s] - %(message)s'))

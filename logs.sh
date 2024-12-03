@@ -11,13 +11,15 @@ NC='\033[0m' # No Color
 declare -A LOG_FILES=(
     ["klipper"]="/home/pi/printer_data/logs/klippy.log:Klipper main log"
     ["moonraker"]="/home/pi/printer_data/logs/moonraker.log:Moonraker main log"
-    ["lister"]="/home/pi/printer_data/logs/lister_config.log:Lister configuration log (includes numpad and sound system)"
+    ["lister"]="/home/pi/printer_data/logs/lister_config.log:Lister configuration log"
     ["numpad"]="/home/pi/printer_data/logs/numpad_event_service.log:Numpad event service log"
+    ["sound"]="/home/pi/printer_data/logs/sound_system.log:Sound system log"
+    ["metadata"]="/home/pi/printer_data/logs/lister_metadata_update.log:Lister metadata update log"
 )
 
 # Function to print usage
 print_usage() {
-    echo -e "${BLUE}Usage: $0 {list|klipper|moonraker|lister|numpad}${NC}"
+    echo -e "${BLUE}Usage: $0 {list|klipper|moonraker|lister|numpad|sound|metadata}${NC}"
     echo
     echo "Commands:"
     echo -e "  ${GREEN}list${NC}      List all available log files"
@@ -25,6 +27,8 @@ print_usage() {
     echo -e "  ${GREEN}moonraker${NC} View Moonraker logs"
     echo -e "  ${GREEN}lister${NC}    View Lister configuration logs"
     echo -e "  ${GREEN}numpad${NC}    View Numpad event service logs"
+    echo -e "  ${GREEN}sound${NC}     View Sound system logs"
+    echo -e "  ${GREEN}metadata${NC}  View Lister metadata update logs"
     echo
     echo "The logs will show the last 500 lines and then follow any new entries."
 }
@@ -76,7 +80,7 @@ case "$1" in
     "list")
         list_logs
         ;;
-    "klipper"|"moonraker"|"lister"|"numpad")
+    "klipper"|"moonraker"|"lister"|"numpad"|"sound"|"metadata")
         view_log "$1"
         ;;
     *)

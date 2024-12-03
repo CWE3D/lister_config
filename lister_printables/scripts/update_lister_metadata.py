@@ -9,7 +9,7 @@ from requests.exceptions import RequestException
 # Configuration
 MOONRAKER_URL = "http://localhost:7125"
 LISTER_PRINTABLES_PATH = "/home/pi/printer_data/gcodes/lister_printables"
-LOG_FILE = "/home/pi/printer_data/logs/lister_config.log"
+LOG_FILE = "/home/pi/printer_data/logs/lister_metadata_update.log"
 GCODES_ROOT = "/home/pi/printer_data/gcodes"
 MAX_RETRIES = 30
 RETRY_DELAY = 10  # seconds
