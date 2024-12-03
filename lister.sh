@@ -201,8 +201,9 @@ setup_services() {
         echo "uinput" >> /etc/modules
     fi
     
-    # Setup symlinks first
-    setup_symlinks
+    # Setup symlinks first (only for Moonraker component)
+    ln -sf "${NUMPAD_DIR}/components/numpad_macros.py" \
+        "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py"
     
     # Then setup numpad event service
     ln -sf "$SERVICE_FILE" \
@@ -341,7 +342,7 @@ update_repo() {
 verify_numpad_setup() {
     log_message "INFO" "Verifying numpad setup..." "INSTALL"
     
-    # Ensure no incorrect symlink exists
+    # Ensure no incorrect symlink exists (remove this check as it's not a Klipper plugin)
     if [ -L "${KLIPPER_DIR}/klippy/extras/numpad_event_service.py" ]; then
         log_message "WARNING" "Removing incorrect numpad service symlink" "INSTALL"
         rm -f "${KLIPPER_DIR}/klippy/extras/numpad_event_service.py"
@@ -365,7 +366,13 @@ verify_numpad_setup() {
         return 1
     fi
     
-    # Check component installation
+    # Check if service is enabled and running
+    if ! systemctl is-enabled --quiet numpad_event_service; then
+        log_message "ERROR" "Numpad service is not enabled" "INSTALL"
+        return 1
+    fi
+    
+    # Check component installation (this is the Moonraker component, which is correct)
     if [ ! -L "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py" ]; then
         log_message "ERROR" "Numpad component not installed" "INSTALL"
         return 1
