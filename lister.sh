@@ -483,6 +483,12 @@ setup_sound_system() {
 verify_system_requirements() {
     log_message "INFO" "Verifying system requirements..." "INSTALL"
     
+    # Check for git
+    if ! command -v git >/dev/null 2>&1; then
+        log_message "ERROR" "Git is not installed" "INSTALL"
+        return 1
+    }
+    
     # Check disk space (need at least 500MB free)
     local free_space=$(df -m /home/pi | awk 'NR==2 {print $4}')
     if [ "$free_space" -lt 500 ]; then
@@ -551,6 +557,44 @@ cleanup_incorrect_symlinks() {
     fi
 }
 
+# Add this new function
+init_git_repository() {
+    log_message "INFO" "Initializing git repository..." "INSTALL"
+    
+    # Check if we're in a git repository
+    if [ ! -d "${LISTER_CONFIG_DIR}/.git" ]; then
+        cd "${LISTER_CONFIG_DIR}" || {
+            log_message "ERROR" "Failed to change to repository directory" "INSTALL"
+            return 1
+        }
+        
+        # Initialize git repository
+        git init
+        git config --local user.name "Lister Config"
+        git config --local user.email "lister@local.dev"
+        
+        # Add remote if not exists (you'll need to replace with your actual remote URL)
+        if ! git remote | grep -q "origin"; then
+            git remote add origin "https://github.com/your-repo/lister_config.git"
+        fi
+        
+        # Setup LFS
+        git lfs install
+        
+        # Create initial commit if needed
+        if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
+            git add .
+            git commit -m "Initial commit"
+        fi
+        
+        log_message "INFO" "Git repository initialized successfully" "INSTALL"
+    else
+        log_message "INFO" "Git repository already initialized" "INSTALL"
+    fi
+    
+    return 0
+}
+
 # Main process
 main() {
     check_root
@@ -568,6 +612,10 @@ main() {
         "install")
             install_system_deps
             install_python_deps
+            init_git_repository || {
+                log_message "ERROR" "Git repository initialization failed" "INSTALL"
+                exit 1
+            }
             setup_services || {
                 log_message "ERROR" "Service setup failed" "INSTALL"
                 exit 1
@@ -583,6 +631,10 @@ main() {
             fix_script_permissions
             ;;
         "refresh")
+            init_git_repository || {
+                log_message "ERROR" "Git repository initialization failed" "INSTALL"
+                exit 1
+            }
             update_repo || {
                 log_message "ERROR" "Failed to update repository" "INSTALL"
                 exit 1
