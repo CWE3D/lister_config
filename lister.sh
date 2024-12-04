@@ -567,6 +567,10 @@ init_git_repository() {
         return 1
     }
     
+    # Always set fileMode to false for this repository
+    git config core.fileMode false
+    log_message "INFO" "Disabled git fileMode tracking" "INSTALL"
+    
     # Check if this is a cloned repository
     if git remote -v | grep -q "origin.*fetch"; then
         log_message "INFO" "Repository already cloned and configured" "INSTALL"
@@ -581,6 +585,7 @@ init_git_repository() {
         git init
         git config --local user.name "CWE3D"
         git config --local user.email "jason@schoeman.me"
+        git config --global core.fileMode false  # Set it right after init too
         
         # Add remote if not exists
         if ! git remote | grep -q "origin"; then

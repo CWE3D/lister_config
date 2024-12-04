@@ -23,4 +23,5 @@
 *.sh text eol=lf executable
 *.py text eol=lf executable
 lister.sh text eol=lf executable
+*.sh -x
 
