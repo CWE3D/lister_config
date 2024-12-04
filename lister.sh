@@ -16,6 +16,7 @@ MOONRAKER_DIR="/home/pi/moonraker"
 KLIPPY_ENV="/home/pi/klippy-env"
 MOONRAKER_ENV="/home/pi/moonraker-env"
 EXPECTED_SCRIPT_PATH="/home/pi/lister_config/lister.sh"
+LISTER_GIT_REPO="https://github.com/CWE3D/lister_config.git"
 
 # Component paths
 PRINTABLES_DIR="${LISTER_CONFIG_DIR}/lister_printables"
@@ -583,7 +584,7 @@ init_git_repository() {
         
         # Add remote if not exists
         if ! git remote | grep -q "origin"; then
-            git remote add origin "https://github.com/CWE3D/lister_config.git"
+            git remote add origin $LISTER_GIT_REPO
         fi
         
         # Setup LFS
