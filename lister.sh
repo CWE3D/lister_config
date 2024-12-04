@@ -228,6 +228,12 @@ fix_script_permissions() {
     chmod +x "${LISTER_CONFIG_DIR}/lister.sh"
     chmod +x "${LISTER_CONFIG_DIR}/cleanup.sh"
     chmod +x "${LISTER_CONFIG_DIR}/logs.sh"
+    
+    # Reset git repository state to prevent "dirty" status from permission changes
+    if [ -d "${LISTER_CONFIG_DIR}/.git" ]; then
+        cd "${LISTER_CONFIG_DIR}" && git checkout -- .
+        log_message "INFO" "Reset git repository state" "INSTALL"
+    fi
 }
 
 # Function to fix permissions
