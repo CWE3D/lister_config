@@ -343,11 +343,19 @@ class NumpadMacros:
                     if key == 'key_up':
                         cmd = f"SET_GCODE_OFFSET Z_ADJUST={self.z_adjust_increment} MOVE=1"
                         adjustment = self.z_adjust_increment
-                        await self._execute_gcode('_FURTHER_KNOB_FIRST_LAYER')  # Sound for up
+                        await self._execute_gcode('_FURTHER_KNOB_FIRST_LAYER')
                     else:
                         cmd = f"SET_GCODE_OFFSET Z_ADJUST=-{self.z_adjust_increment} MOVE=1"
                         adjustment = -self.z_adjust_increment
-                        await self._execute_gcode('_NEARER_KNOB_FIRST_LAYER')   # Sound for down
+                        await self._execute_gcode('_NEARER_KNOB_FIRST_LAYER')
+
+                    # We should add the trigger here
+                    self._accumulated_z_adjust += adjustment
+                    self._pending_z_offset_save = True
+                    self._last_z_adjust_time = time.time()
+                    
+                    # Start the delayed save
+                    asyncio.create_task(self._delayed_save_z_offset())
 
                 else:
                     # Speed adjustment using M220
