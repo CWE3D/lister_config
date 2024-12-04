@@ -225,16 +225,17 @@ setup_services() {
 fix_script_permissions() {
     log_message "INFO" "Setting script permissions..." "INSTALL"
     
-    # Make scripts executable
+    # Reset git repository state first
+    # if [ -d "${LISTER_CONFIG_DIR}/.git" ]; then
+    #     cd "${LISTER_CONFIG_DIR}" && git checkout -- .
+    #     log_message "INFO" "Reset git repository state" "INSTALL"
+    # fi
+    
+    # Make scripts executable after git reset
     chmod +x "${LISTER_CONFIG_DIR}/lister.sh"
     chmod +x "${LISTER_CONFIG_DIR}/cleanup.sh"
     chmod +x "${LISTER_CONFIG_DIR}/logs.sh"
-    
-    # Reset git repository state to prevent "dirty" status from permission changes
-    if [ -d "${LISTER_CONFIG_DIR}/.git" ]; then
-        cd "${LISTER_CONFIG_DIR}" && git checkout -- .
-        log_message "INFO" "Reset git repository state" "INSTALL"
-    fi
+    log_message "INFO" "Made shell scripts executable" "INSTALL"
 }
 
 # Function to fix permissions
