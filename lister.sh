@@ -487,7 +487,7 @@ verify_system_requirements() {
     if ! command -v git >/dev/null 2>&1; then
         log_message "ERROR" "Git is not installed" "INSTALL"
         return 1
-    }
+    fi
     
     # Check disk space (need at least 500MB free)
     local free_space=$(df -m /home/pi | awk 'NR==2 {print $4}')
@@ -559,23 +559,31 @@ cleanup_incorrect_symlinks() {
 
 # Add this new function
 init_git_repository() {
-    log_message "INFO" "Initializing git repository..." "INSTALL"
+    log_message "INFO" "Checking git repository status..." "INSTALL"
     
-    # Check if we're in a git repository
-    if [ ! -d "${LISTER_CONFIG_DIR}/.git" ]; then
-        cd "${LISTER_CONFIG_DIR}" || {
-            log_message "ERROR" "Failed to change to repository directory" "INSTALL"
-            return 1
-        }
+    cd "${LISTER_CONFIG_DIR}" || {
+        log_message "ERROR" "Failed to change to repository directory" "INSTALL"
+        return 1
+    }
+    
+    # Check if this is a cloned repository
+    if git remote -v | grep -q "origin.*fetch"; then
+        log_message "INFO" "Repository already cloned and configured" "INSTALL"
+        return 0
+    }
+    
+    # Check if we need to initialize
+    if [ ! -d ".git" ]; then
+        log_message "INFO" "Initializing new git repository..." "INSTALL"
         
         # Initialize git repository
         git init
-        git config --local user.name "Lister Config"
-        git config --local user.email "lister@local.dev"
+        git config --local user.name "CWE3D"
+        git config --local user.email "jason@schoeman.me"
         
-        # Add remote if not exists (you'll need to replace with your actual remote URL)
+        # Add remote if not exists
         if ! git remote | grep -q "origin"; then
-            git remote add origin "https://github.com/your-repo/lister_config.git"
+            git remote add origin "https://github.com/CWE3D/lister_config.git"
         fi
         
         # Setup LFS
@@ -589,7 +597,7 @@ init_git_repository() {
         
         log_message "INFO" "Git repository initialized successfully" "INSTALL"
     else
-        log_message "INFO" "Git repository already initialized" "INSTALL"
+        log_message "INFO" "Local git repository exists but not fully configured" "INSTALL"
     fi
     
     return 0
