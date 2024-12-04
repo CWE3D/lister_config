@@ -262,6 +262,12 @@ fix_permissions() {
 restart_services() {
     log_message "INFO" "Restarting services..." "INSTALL"
     
+    # Reload systemd first to handle any unit file changes
+    systemctl daemon-reload
+    log_message "INFO" "Systemd daemon reloaded" "INSTALL"
+    
+    sleep 2  # Give systemd time to process the reload
+    
     systemctl restart klipper
     sleep 2
     systemctl restart moonraker
@@ -655,6 +661,7 @@ main() {
             }
             cleanup_incorrect_symlinks
             fix_script_permissions
+            restart_services
             ;;
         "sync")
             log_message "INFO" "Updating repository before sync..." "INSTALL"
