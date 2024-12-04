@@ -575,7 +575,7 @@ init_git_repository() {
     if git remote -v | grep -q "origin.*fetch"; then
         log_message "INFO" "Repository already cloned and configured" "INSTALL"
         return 0
-    }
+    fi
     
     # Check if we need to initialize
     if [ ! -d ".git" ]; then
