@@ -2,7 +2,7 @@
 This is the official Klipper config directory, this should sit in the lister_config directory and called by the printer.cfg.
 
 
-## Version 2.5.0
+## Version 2.6
 
 Hi Anita, please follow the instructions below to update our inner workings.
 
