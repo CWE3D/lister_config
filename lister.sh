@@ -158,6 +158,13 @@ sync_config_files() {
     cp -f "${LISTER_CONFIG_DIR}/lister_printer.cfg" "${CONFIG_DIR}/"
     cp -f "${LISTER_CONFIG_DIR}/lister_moonraker.cfg" "${CONFIG_DIR}/"
     
+    # Remove old macro files if they exist (with dashes)
+    rm -f "${CONFIG_DIR}/lister_config/macros/macros-base.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/macros/macros-probe.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/macros/macros-homing.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/macros/macros.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/macros/numpad-macros.cfg"
+    
     # Sync other config files using rsync
     sync_with_rsync "${LISTER_CONFIG_DIR}/config/" "${CONFIG_DIR}/lister_config/" "lister config files" || return 1
     sync_with_rsync "${LISTER_CONFIG_DIR}/macros/" "${CONFIG_DIR}/lister_config/macros/" "macro config files" || return 1
