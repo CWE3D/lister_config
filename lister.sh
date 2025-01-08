@@ -444,18 +444,37 @@ verify_sound_setup() {
     done
     
     # Check for sound files
-    if [ -z "$(ls -A $SOUND_MP3_DIR)" ]; then
-        log_message "WARNING" "No MP3 files found in sounds directory" "INSTALL"
+    if [ -z "$(ls -A $SOUND_MP3_DIR)" ] && [ -z "$(ls -A $SOUND_WAV_DIR)" ]; then
+        log_message "WARNING" "No sound files found in sounds directories" "INSTALL"
     fi
     
-    # Check component symlinks
-    if [ ! -L "${KLIPPER_DIR}/klippy/extras/sound_system.py" ]; then
+    # Check component symlinks and verify they point to the correct files
+    local klipper_sound="${KLIPPER_DIR}/klippy/extras/sound_system.py"
+    local moonraker_sound="${MOONRAKER_DIR}/moonraker/components/sound_system_service.py"
+    
+    if [ ! -L "$klipper_sound" ] || [ ! -f "$klipper_sound" ]; then
         log_message "ERROR" "Sound system Klipper component not linked" "INSTALL"
         return 1
     fi
     
-    if [ ! -L "${MOONRAKER_DIR}/moonraker/components/sound_system_service.py" ]; then
+    if [ ! -L "$moonraker_sound" ] || [ ! -f "$moonraker_sound" ]; then
         log_message "ERROR" "Sound system Moonraker component not linked" "INSTALL"
+        return 1
+    fi
+    
+    # Verify symlink targets
+    local klipper_target=$(readlink -f "$klipper_sound")
+    local moonraker_target=$(readlink -f "$moonraker_sound")
+    local expected_klipper="${SOUND_DIR}/extras/sound_system.py"
+    local expected_moonraker="${SOUND_DIR}/components/sound_system_service.py"
+    
+    if [ "$klipper_target" != "$expected_klipper" ]; then
+        log_message "ERROR" "Klipper sound symlink points to wrong target: $klipper_target" "INSTALL"
+        return 1
+    fi
+    
+    if [ "$moonraker_target" != "$expected_moonraker" ]; then
+        log_message "ERROR" "Moonraker sound symlink points to wrong target: $moonraker_target" "INSTALL"
         return 1
     fi
     
@@ -465,6 +484,7 @@ verify_sound_setup() {
         return 1
     fi
     
+    log_message "INFO" "Sound system verification completed successfully" "INSTALL"
     return 0
 }
 
@@ -476,10 +496,15 @@ setup_sound_system() {
     mkdir -p "$SOUND_WAV_DIR"
     mkdir -p "$SOUND_MP3_DIR"
     
+    # Setup symlinks for sound system
+    ln -sf "${SOUND_DIR}/extras/sound_system.py" \
+        "${KLIPPER_DIR}/klippy/extras/sound_system.py"
+    ln -sf "${SOUND_DIR}/components/sound_system_service.py" \
+        "${MOONRAKER_DIR}/moonraker/components/sound_system_service.py"
+    
     # Set permissions
     chown -R pi:pi "$SOUND_FILES_DIR"
-    # find "$SOUND_FILES_DIR" -type d -exec chmod 755 {} \;
-    # find "$SOUND_FILES_DIR" -type f -exec chmod 644 {} \;
+    chmod -R 755 "$SOUND_FILES_DIR"
     
     # Set initial volume
     if amixer sget 'PCM' &> /dev/null; then
