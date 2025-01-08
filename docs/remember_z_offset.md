@@ -30,10 +30,10 @@ to adjust, making it remembering it for the next print an excellent feature.
         - So we want to remember just the just the adjustment the user makes through the knob in the first print -
             - For example, I am starting a print, in my slicer I have it set to include a 0.05mm offset for this specific filament.
             - The print starts, the first layer begins and I turn the know twice and it adjusts 0.06 and the height is now perfect so we see a total if 0.11 adjustement.
-                - Now in Variables real_z_offset (for example) is set to 0.06, so that when I start the new print it will automatically be 0.11
+                - Now in Variables knob_tuned_z_offset (for example) is set to 0.06, so that when I start the new print it will automatically be 0.11
                 - But if I want it to print closer again I turn the know down and I deduct -0.02 from it, so the new saved value should be 0.04
             - We must make sure that the printers passed through z_offset does not simply override our variable restored but calculated together by doing that after receiving any z offset from slicer.
-        - Take into account that when the probe calibrate process is running, this variable real_z_offset should be reset to 0.
+        - Take into account that when the probe calibrate process is running, this variable knob_tuned_z_offset should be reset to 0.
 
 ### VARIABLE
 
@@ -41,8 +41,8 @@ to adjust, making it remembering it for the next print an excellent feature.
 [Variables]
 calibration_count = 1
 last_printed_file = '/home/pi/printer_data/gcodes/lister_printables_/speaker_box_set.gcode'
-probe_z_offset = 0.918
-true_max_height = 240.49174998363455
+probe_to_nozzle_offset = 0.918
+probed_max_z_height = 240.49174998363455
 z_offset = 4.508250016365447
 
 # It gets saved like this in macros:

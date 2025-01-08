@@ -490,7 +490,7 @@ class NumpadMacros:
         self._reset_state()
 
     async def _delayed_save_z_offset(self) -> None:
-        """Save the Z adjustment by modifying true_max_height and knob_tuned_z_offset"""
+        """Save the Z adjustment by modifying probed_max_z_height and knob_tuned_z_offset"""
         try:
             # Wait for the delay period
             await asyncio.sleep(self.z_offset_save_delay)
@@ -501,14 +501,14 @@ class NumpadMacros:
                 kapis: KlippyAPI = self.server.lookup_component('klippy_apis')
                 result = await kapis.query_objects({'save_variables': None})
                 variables = result.get('save_variables', {}).get('variables', {})
-                current_true_max = variables.get('true_max_height', 0.0)
+                current_true_max = variables.get('probed_max_z_height', 0.0)
                 current_knob_offset = variables.get('knob_tuned_z_offset', 0.0)
                 
                 # Update the knob tuned offset
                 new_knob_offset = float(current_knob_offset) + self._accumulated_z_adjust
                 
-                # For positive adjustment (up), subtract from true_max_height
-                # For negative adjustment (down), add to true_max_height
+                # For positive adjustment (up), subtract from probed_max_z_height
+                # For negative adjustment (down), add to probed_max_z_height
                 new_true_max = float(current_true_max) - self._accumulated_z_adjust
 
                 # Save both values
@@ -516,12 +516,12 @@ class NumpadMacros:
                     f'SAVE_VARIABLE VARIABLE=knob_tuned_z_offset VALUE={new_knob_offset}'
                 )
                 await self._execute_gcode(
-                    f'SAVE_VARIABLE VARIABLE=true_max_height VALUE={new_true_max}'
+                    f'SAVE_VARIABLE VARIABLE=probed_max_z_height VALUE={new_true_max}'
                 )
 
                 if self.debug_log:
                     self.logger.debug(
-                        f"Adjusted values: true_max_height: {current_true_max} -> {new_true_max}, "
+                        f"Adjusted values: probed_max_z_height: {current_true_max} -> {new_true_max}, "
                         f"knob_tuned_z_offset: {current_knob_offset} -> {new_knob_offset}"
                     )
 
@@ -529,7 +529,7 @@ class NumpadMacros:
                 self._accumulated_z_adjust = 0.0
                 self._pending_z_offset_save = False
 
-                # Update park_z with new true_max_height
+                # Update park_z with new probed_max_z_height
                 await self._execute_gcode('UPDATE_PARK_Z')
 
         except Exception as e:
