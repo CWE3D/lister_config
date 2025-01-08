@@ -517,27 +517,22 @@ class NumpadMacros:
                 result = await kapis.query_objects({'save_variables': None})
                 variables = result.get('save_variables', {}).get('variables', {})
                 current_true_max = variables.get('probed_max_z_height', 0.0)
-                current_knob_offset = variables.get('knob_tuned_z_offset', 0.0)
-                
-                # Update the knob tuned offset
-                new_knob_offset = float(current_knob_offset) + self._accumulated_z_adjust
                 
                 # For positive adjustment (up), subtract from probed_max_z_height
                 # For negative adjustment (down), add to probed_max_z_height
                 new_true_max = float(current_true_max) - self._accumulated_z_adjust
 
                 # Save both values
-                await self._execute_gcode(
-                    f'SAVE_VARIABLE VARIABLE=knob_tuned_z_offset VALUE={new_knob_offset}'
-                )
+                # await self._execute_gcode(
+                #     f'SAVE_VARIABLE VARIABLE=knob_tuned_z_offset VALUE={new_knob_offset}'
+                # )
                 await self._execute_gcode(
                     f'SAVE_VARIABLE VARIABLE=probed_max_z_height VALUE={new_true_max}'
                 )
 
                 if self.debug_log:
                     self.logger.debug(
-                        f"Adjusted values: probed_max_z_height: {current_true_max} -> {new_true_max}, "
-                        f"knob_tuned_z_offset: {current_knob_offset} -> {new_knob_offset}"
+                        f"Adjusted values: probed_max_z_height: {current_true_max} -> {new_true_max} "
                     )
 
                 # Reset tracking variables
