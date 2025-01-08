@@ -47,26 +47,26 @@ class NumpadMacros:
             "max": 300,
             "min": 20
         }
-
-        # Build speed settings from individual values
-        self.speed_settings = {
-            "increment": config.getint('speed_settings_increment', default_speed_settings["increment"]),
-            "max": config.getint('speed_settings_max', default_speed_settings["max"]),
-            "min": config.getint('speed_settings_min', default_speed_settings["min"])
-        }
+        self.speed_settings = config.getdict('speed_settings', default=default_speed_settings)
 
         if self.debug_log:
             self.logger.debug(f"Loaded speed settings: {self.speed_settings}")
 
         # Add configuration for probe adjustments
         self.probe_min_step = config.getfloat(
-            'probe_min_step', 0.025, above=0., below=0.1
+            'probe_min_step', 0.025, above=0., below=1.
         )
         self.probe_coarse_multiplier = config.getfloat(
             'probe_coarse_multiplier', 0.5, above=0., below=1.
         )
-        self.fine_tune_from = config.getfloat(
-            'fine_tune_from', 0.15, above=0., below=1.
+        self.probe_fine_multiplier = config.getfloat(
+            'probe_fine_multiplier', 0.2, above=0., below=1.
+        )
+        self.probe_fine_min_step = config.getfloat(
+            'probe_fine_min_step', 0.01, above=0., below=1.
+        )
+        self.quick_jumps_limit = config.getint(
+            'quick_jumps_limit', 2, above=0, below=10
         )
 
         # Define default no-confirm and confirmation keys
@@ -95,6 +95,8 @@ class NumpadMacros:
         self.pending_command: Optional[str] = None
         self.is_probing: bool = False
         self._is_printing: bool = False
+        self.quick_jumps_count: int = 0
+        self.is_fine_tuning: bool = False
         self.z_offset_save_delay = config.getfloat(
             'z_offset_save_delay', 10.0, above=0.
         )
@@ -298,7 +300,8 @@ class NumpadMacros:
             await self._check_klippy_state()
             if self.debug_log:
                 self.logger.debug(
-                    f"Klippy state checked - is_probing: {self.is_probing}, is_printing: {self._is_printing}")
+                    f"Klippy state checked - is_probing: {self.is_probing}, is_printing: {self._is_printing}"
+                )
 
             # Initialize cmd as None
             cmd = None
@@ -311,17 +314,22 @@ class NumpadMacros:
                 if self.debug_log:
                     self.logger.debug(f"Probe adjustment - Current Z: {current_z}")
 
-                # Determine step size based on height
-                if current_z < self.fine_tune_from:  # Use configurable threshold
-                    # Fine adjustment mode - no step size calculation needed
+                if key == 'key_down' and not self.is_fine_tuning:
+                    self.quick_jumps_count += 1
+                    if self.quick_jumps_count >= self.quick_jumps_limit:
+                        self.is_fine_tuning = True
+                        await self._execute_gcode('RESPOND MSG="Switched to fine tuning mode"')
+
+                if self.is_fine_tuning:
+                    # Fine tuning mode
                     if key == 'key_up':
                         await self._execute_gcode('_FURTHER_KNOB_PROBE_MICRO_CALIBRATE')
-                        cmd = f"TESTZ Z=+"
+                        cmd = "TESTZ Z=+"
                     else:
                         await self._execute_gcode('_NEARER_KNOB_PROBE_MICRO_CALIBRATE')
-                        cmd = f"TESTZ Z=-"
+                        cmd = "TESTZ Z=-"
                 else:
-                    # Keep existing coarse adjustment logic
+                    # Coarse adjustment mode
                     step_size = max(current_z * self.probe_coarse_multiplier, self.probe_min_step)
                     if key == 'key_up':
                         await self._execute_gcode('_FURTHER_KNOB_PROBE_CALIBRATE')
@@ -422,6 +430,13 @@ class NumpadMacros:
             probe_status = result.get('gcode_macro CHECK_PROBE_STATUS', {})
             previous_probing = self.is_probing
             self.is_probing = probe_status.get('monitor_active', False)
+
+            # Reset fine tuning mode when starting a new probe operation
+            if not previous_probing and self.is_probing:
+                self.is_fine_tuning = False
+                self.quick_jumps_count = 0
+                if self.debug_log:
+                    self.logger.debug("New probe operation started - Reset fine tuning mode and quick jumps counter")
 
             if self.debug_log:
                 self.logger.debug(f"Probe status change: {previous_probing} -> {self.is_probing}")
@@ -544,6 +559,8 @@ class NumpadMacros:
         self.pending_command = None
         self._is_printing = False
         self.is_probing = False
+        self.quick_jumps_count = 0
+        self.is_fine_tuning = False
         self._accumulated_z_adjust = 0.0
         self._pending_z_offset_save = False
         self._last_z_adjust_time = 0.0
