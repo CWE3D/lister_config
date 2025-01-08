@@ -105,6 +105,7 @@ cleanup_config() {
     # Remove old macro files (with dashes)
     rm -f "${CONFIG_DIR}/lister_config/macros/macros-base.cfg"
     rm -f "${CONFIG_DIR}/lister_config/macros/macros-probe.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/macros/macros-probing.cfg"
     rm -f "${CONFIG_DIR}/lister_config/macros/macros-homing.cfg"
     rm -f "${CONFIG_DIR}/lister_config/macros/macros.cfg"
     rm -f "${CONFIG_DIR}/lister_config/macros/numpad-macros.cfg"
@@ -112,6 +113,7 @@ cleanup_config() {
     # Remove new macro files (with underscores)
     rm -f "${CONFIG_DIR}/lister_config/macros/macros_base.cfg"
     rm -f "${CONFIG_DIR}/lister_config/macros/macros_probe.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/macros/macros_probing.cfg"
     rm -f "${CONFIG_DIR}/lister_config/macros/macros_homing.cfg"
     rm -f "${CONFIG_DIR}/lister_config/macros/macros.cfg"
     rm -f "${CONFIG_DIR}/lister_config/macros/numpad_macros.cfg"
@@ -119,6 +121,26 @@ cleanup_config() {
     # Remove other config files
     rm -f "${CONFIG_DIR}/lister_printer.cfg"
     rm -f "${CONFIG_DIR}/lister_moonraker.cfg"
+    
+    # Remove old config files (with dashes)
+    rm -f "${CONFIG_DIR}/lister_config/z-tilt.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/speed-limits.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/size-250-250.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/screw-tilt-adjust.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/runout-sensor.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/input-shaper.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/btt-smart-sensor-v2.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/btt-skr-pro-12.cfg"
+    
+    # Remove new config files (with underscores)
+    rm -f "${CONFIG_DIR}/lister_config/z_tilt.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/speed_limits.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/size_250_250.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/screw_tilt_adjust.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/runout_sensor.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/input_shaper.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/btt_smart_sensor_v2.cfg"
+    rm -f "${CONFIG_DIR}/lister_config/btt_skr_pro_12.cfg"
     
     # Remove directories if empty
     rmdir "${CONFIG_DIR}/lister_config/macros" 2>/dev/null || true
