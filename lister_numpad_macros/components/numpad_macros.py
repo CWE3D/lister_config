@@ -490,31 +490,39 @@ class NumpadMacros:
         self._reset_state()
 
     async def _delayed_save_z_offset(self) -> None:
-        """Save the Z adjustment by modifying true_max_height"""
+        """Save the Z adjustment by modifying true_max_height and knob_tuned_z_offset"""
         try:
             # Wait for the delay period
             await asyncio.sleep(self.z_offset_save_delay)
 
             # Only proceed if this is the most recent adjustment
             if self._pending_z_offset_save:
-                # Get current true_max_height
+                # Get current values
                 kapis: KlippyAPI = self.server.lookup_component('klippy_apis')
                 result = await kapis.query_objects({'save_variables': None})
-                current_true_max = result.get('save_variables', {}).get('variables', {}).get('true_max_height', 0.0)
+                variables = result.get('save_variables', {}).get('variables', {})
+                current_true_max = variables.get('true_max_height', 0.0)
+                current_knob_offset = variables.get('knob_tuned_z_offset', 0.0)
+                
+                # Update the knob tuned offset
+                new_knob_offset = float(current_knob_offset) + self._accumulated_z_adjust
                 
                 # For positive adjustment (up), subtract from true_max_height
                 # For negative adjustment (down), add to true_max_height
                 new_true_max = float(current_true_max) - self._accumulated_z_adjust
 
-                # Save the new true_max_height
+                # Save both values
+                await self._execute_gcode(
+                    f'SAVE_VARIABLE VARIABLE=knob_tuned_z_offset VALUE={new_knob_offset}'
+                )
                 await self._execute_gcode(
                     f'SAVE_VARIABLE VARIABLE=true_max_height VALUE={new_true_max}'
                 )
 
                 if self.debug_log:
                     self.logger.debug(
-                        f"Adjusted true_max_height: current({current_true_max}) adjusted by "
-                        f"(-{self._accumulated_z_adjust}) = new({new_true_max})"
+                        f"Adjusted values: true_max_height: {current_true_max} -> {new_true_max}, "
+                        f"knob_tuned_z_offset: {current_knob_offset} -> {new_knob_offset}"
                     )
 
                 # Reset tracking variables

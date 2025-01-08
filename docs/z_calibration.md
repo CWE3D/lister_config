@@ -90,3 +90,93 @@ Advanced users can modify calibration interval or probing position in the `CALIB
 Regular mechanical component checks and maintenance remain crucial despite this system's assistance in maintaining accurate Z-axis positioning.
 
 For further questions or issues, consult the Lister 3D Printer manual or contact support.
+
+### `probe_z_offset`
+This is the offset between the probe and the nozzle.
+
+**Where it's saved:**
+1. In `macros-probe.cfg`:
+   - Saved during probe calibration via `PROBE_CALIBRATE` and `CHECK_PROBE_CALIBRATION_STATUS`
+   - Saved using `SAVE_VARIABLE VARIABLE=probe_z_offset VALUE={new_offset}`
+
+**Where it's used:**
+1. In `macros-probe.cfg`:
+   - Used in `MEASURE_Z_HEIGHT` to calculate the true height:
+   ```python
+   {% set saved_probe_z_offset = printer.save_variables.variables.get('probe_z_offset', printer.configfile.settings['probe']['z_offset']|float) %}
+   {% set CALCULATED_OFFSET = MEASURED_Z - PROBE_Z_OFFSET %}
+   ```
+
+### `real_z_offset`
+This is the offset of the nozzle from the bed.
+
+**Where it's saved:**
+1. In `macros-probe.cfg`:
+   - Used in `CALIBRATE_Z_HEIGHT` to adjust the true height:
+   ```python
+   {% set saved_z_offset = printer.save_variables.variables.get('real_z_offset', 0.0)|float %}
+   {% set adjusted_true_height = base_true_height - saved_z_offset %}
+   ```
+
+### `true_max_height`
+This is the actual maximum Z height of the printer after calibration.
+
+**Where it's saved:**
+1. In `macros-probe.cfg`:
+   - Initially saved in `MEASURE_Z_HEIGHT`:
+   ```python
+   {% set TRUE_MAX_HEIGHT = EXPECTED_MAX - CALCULATED_OFFSET %}
+   SAVE_VARIABLE VARIABLE=true_max_height VALUE={TRUE_MAX_HEIGHT}
+   ```
+   - Adjusted and saved again in `CALIBRATE_Z_HEIGHT`:
+   ```python
+   SAVE_VARIABLE VARIABLE=true_max_height VALUE={adjusted_true_height}
+   ```
+
+2. In `numpad_macros.py`:
+   - Updated during Z adjustments via the numpad:
+   ```python
+   new_true_max = float(current_true_max) - self._accumulated_z_adjust
+   await self._execute_gcode(f'SAVE_VARIABLE VARIABLE=true_max_height VALUE={new_true_max}')
+   ```
+
+**Where it's used:**
+1. In `macros-base.cfg`:
+   - Used in `UPDATE_PARK_Z` to set safe parking height:
+   ```python
+   {% set true_max = printer.save_variables.variables.get('true_max_height', 0) %}
+   SET_GCODE_VARIABLE MACRO=Lister VARIABLE=park_z VALUE={safe_park_z}
+   ```
+
+2. In `macros-probe.cfg`:
+   - Used in `_APPLY_SAVED_Z_HEIGHT` to set kinematic position:
+   ```python
+   {% set saved_z = printer.save_variables.variables.get('true_max_height', 0) %}
+   SET_Z_KINEMATIC_POSITION Z={saved_z}
+   ```
+
+### `z_offset`
+This appears to be a general Z offset value.
+
+**Where it's saved:**
+- Not directly saved in the provided files, but appears to be calculated or used internally by Klipper
+
+The flow of these variables:
+1. `probe_z_offset` is set during probe calibration
+2. This is used with the measured probe height to calculate `true_max_height`
+3. `real_z_offset` is used to adjust `true_max_height` for final positioning
+4. The adjusted `true_max_height` is then used for:
+   - Setting safe parking positions
+   - Setting kinematic positions
+   - Real-time adjustments during printing via the numpad
+
+The key relationship is:
+```python
+true_max_height = EXPECTED_MAX - (MEASURED_Z - probe_z_offset) - real_z_offset
+```
+
+This system allows for:
+1. Accurate probe measurements
+2. Real-time adjustments during printing
+3. Safe parking positions
+4. Persistent storage of calibration values
