@@ -316,7 +316,7 @@ class NumpadMacros:
 
                 if key == 'key_down' and not self.is_fine_tuning:
                     self.quick_jumps_count += 1
-                    if self.quick_jumps_count >= self.quick_jumps_limit:
+                    if self.quick_jumps_count > self.quick_jumps_limit:
                         self.is_fine_tuning = True
                         await self._execute_gcode('RESPOND MSG="Switched to fine tuning mode"')
 
