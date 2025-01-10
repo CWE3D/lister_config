@@ -19,7 +19,7 @@ class SoundSystem:
 
         # Configure paths
         self.sound_dir = Path(config.get('sound_directory',
-                                       '/home/pi/lister_config/lister_sound_system/sounds/mp3')).resolve()
+                                       '/home/pi/lister_config/lister_sound_system/sounds')).resolve()
         self.logger.info(f"Sound directory: {self.sound_dir}")
 
         # Volume control configuration

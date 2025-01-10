@@ -11,7 +11,7 @@ class SoundSystemService:
 
         # Configure paths
         self.sound_dir = Path(config.get('sound_directory',
-                                       '/home/pi/lister_config/lister_sound_system/sounds/mp3')).expanduser().resolve()
+                                       '/home/pi/lister_config/lister_sound_system/sounds')).expanduser().resolve()
 
         # Initialize sound cache
         self._sound_cache: Dict[str, str] = {}
