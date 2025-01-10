@@ -11,7 +11,7 @@ class SoundSystemService:
 
         # Configure paths
         self.sound_dir = Path(config.get('sound_directory',
-                                         '/home/pi/lister_config/lister_sound_system/sounds')).expanduser().resolve()
+                                       '/home/pi/lister_config/lister_sound_system/sounds/mp3')).expanduser().resolve()
 
         # Initialize sound cache
         self._sound_cache: Dict[str, str] = {}
@@ -37,16 +37,14 @@ class SoundSystemService:
         logging.info(f"Sound System Service initialized with dir: {self.sound_dir}")
 
     def _verify_sound_file(self, path: Path) -> bool:
-        """Verify if file exists and is a valid WAV file"""
+        """Verify if file exists and is an MP3 file"""
         try:
             if not path.is_file():
                 return False
-
-            # Basic WAV header check
-            with open(path, 'rb') as f:
-                header = f.read(12)
-                return (header.startswith(b'RIFF') and
-                        header[8:12] == b'WAVE')
+            
+            # Check file extension
+            return path.suffix.lower() == '.mp3'
+            
         except Exception as e:
             logging.error(f"Error verifying sound file {path}: {e}")
             return False
@@ -60,18 +58,22 @@ class SoundSystemService:
                 logging.warning(f"Sound directory not found: {self.sound_dir}")
                 return sounds
 
-            # Scan for WAV files
-            for file_path in self.sound_dir.glob("**/*.wav"):
-                if self._verify_sound_file(file_path):
-                    sounds[file_path.stem] = str(file_path)
+            # Only scan if cache is empty or force scan requested
+            if not self._sound_cache:
+                # Scan for MP3 files
+                for file_path in self.sound_dir.glob("*.mp3"):
+                    if self._verify_sound_file(file_path):
+                        sounds[file_path.stem] = str(file_path)
 
-            self._sound_cache = sounds
+                self._sound_cache = sounds
 
-            # Notify clients
-            await self.server.send_event(
-                "sound_system:sounds_updated",
-                {'sounds': sounds}
-            )
+                # Notify clients
+                await self.server.send_event(
+                    "sound_system:sounds_updated",
+                    {'sounds': sounds}
+                )
+
+            return self._sound_cache
 
         except Exception as e:
             logging.exception(f"Error scanning sounds: {e}")
@@ -85,12 +87,17 @@ class SoundSystemService:
 
     async def _handle_list_request(self, web_request) -> Dict[str, Any]:
         """Handle request to list available sounds"""
-        # Rescan if cache is empty
-        if not self._sound_cache:
-            await self._scan_sounds()
-
+        # Return cached sounds if available
+        if self._sound_cache:
+            return {
+                'sounds': self._sound_cache,
+                'sound_dir': str(self.sound_dir)
+            }
+        
+        # Scan if cache is empty
+        sounds = await self._scan_sounds()
         return {
-            'sounds': self._sound_cache,
+            'sounds': sounds,
             'sound_dir': str(self.sound_dir)
         }
 
@@ -127,6 +134,8 @@ class SoundSystemService:
 
     async def _handle_scan_request(self, web_request) -> Dict[str, Any]:
         """Handle request to rescan sounds directory"""
+        # Clear cache to force rescan
+        self._sound_cache.clear()
         sounds = await self._scan_sounds()
         return {
             'status': 'success',
@@ -139,10 +148,10 @@ class SoundSystemService:
         audio_info = {'devices': []}
 
         try:
-            # Get audio device information using aplay -l
+            # Get audio device information using amixer
             import asyncio
             proc = await asyncio.create_subprocess_exec(
-                'aplay', '-l',
+                'amixer', '-l',
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
@@ -152,8 +161,18 @@ class SoundSystemService:
                 audio_info['devices'] = [
                     line.decode().strip()
                     for line in stdout.splitlines()
-                    if b'card' in line
+                    if b'card' in line or b'mixer' in line
                 ]
+
+            # Add mpg123 version info
+            proc = await asyncio.create_subprocess_exec(
+                'mpg123', '--version',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            if stdout:
+                audio_info['mpg123_version'] = stdout.decode().split('\n')[0]
 
         except Exception as e:
             logging.error(f"Error getting audio info: {e}")
@@ -162,7 +181,8 @@ class SoundSystemService:
             'status': 'online',
             'sound_dir': str(self.sound_dir),
             'sound_count': len(self._sound_cache),
-            'audio_system': audio_info
+            'audio_system': audio_info,
+            'player': 'mpg123'
         }
 
     async def close(self) -> None:

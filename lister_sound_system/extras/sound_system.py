@@ -19,7 +19,7 @@ class SoundSystem:
 
         # Configure paths
         self.sound_dir = Path(config.get('sound_directory',
-                                         '/home/pi/lister_sound_system/sounds')).resolve()
+                                       '/home/pi/lister_config/lister_sound_system/sounds/mp3')).resolve()
         self.logger.info(f"Sound directory: {self.sound_dir}")
 
         # Volume control configuration
@@ -28,11 +28,11 @@ class SoundSystem:
         self.min_volume = config.getint('min_volume', 0)
         self._current_volume = None  # Will be initialized when first needed
 
-        # Find aplay and amixer
-        self.aplay_path = self._get_aplay_path()
+        # Find mpg123 and amixer
+        self.mpg123_path = self._get_mpg123_path()
         self.amixer_path = self._get_amixer_path()
-        if not self.aplay_path:
-            self.logger.error("'aplay' not found in system path")
+        if not self.mpg123_path:
+            self.logger.error("'mpg123' not found in system path")
             return
         if not self.amixer_path:
             self.logger.error("'amixer' not found in system path")
@@ -63,13 +63,13 @@ class SoundSystem:
 
         # Register commands
         self.gcode.register_command('PLAY_SOUND', self.cmd_PLAY_SOUND,
-                                    desc="Play a sound file (PLAY_SOUND SOUND=filename)")
+                                  desc="Play a sound file (PLAY_SOUND SOUND=filename)")
         self.gcode.register_command('SOUND_LIST', self.cmd_SOUND_LIST,
-                                    desc="List available sound files")
+                                  desc="List available sound files")
         self.gcode.register_command('VOLUME_UP', self.cmd_VOLUME_UP,
-                                    desc=f"Increase PCM volume by {self.volume_step}%")
+                                  desc=f"Increase PCM volume by {self.volume_step}%")
         self.gcode.register_command('VOLUME_DOWN', self.cmd_VOLUME_DOWN,
-                                    desc=f"Decrease PCM volume by {self.volume_step}%")
+                                  desc=f"Decrease PCM volume by {self.volume_step}%")
         self.gcode.register_command('STREAM_RADIO', self.cmd_STREAM_RADIO,
                                   desc="Toggle radio stream playback")
 
@@ -135,13 +135,13 @@ class SoundSystem:
         logger.addHandler(handler)
         return logger
 
-    def _get_aplay_path(self):
-        """Find aplay executable path"""
+    def _get_mpg123_path(self):
+        """Find mpg123 executable path"""
         try:
-            return subprocess.check_output(['which', 'aplay'],
-                                           text=True).strip()
+            return subprocess.check_output(['which', 'mpg123'],
+                                        text=True).strip()
         except subprocess.SubprocessError as e:
-            self.logger.error(f"Error finding aplay: {e}")
+            self.logger.error(f"Error finding mpg123: {e}")
             return None
 
     def _get_amixer_path(self):
@@ -154,32 +154,30 @@ class SoundSystem:
             return None
 
     def _verify_sound_file(self, path: Path) -> bool:
-        """Verify file exists and is a valid WAV"""
+        """Verify if file exists and is an MP3 file"""
         try:
             if not path.is_file():
                 return False
-
-            # Basic WAV header check
-            with open(path, 'rb') as f:
-                header = f.read(12)
-                return (header.startswith(b'RIFF') and
-                        header[8:12] == b'WAVE')
+            
+            # Check file extension
+            return path.suffix.lower() == '.mp3'
+            
         except Exception as e:
             self.logger.error(f"Error verifying {path}: {e}")
             return False
 
     def _find_sound_file(self, sound_name: str) -> Optional[Path]:
-        """Find sound file by name, with or without .wav extension"""
+        """Find sound file by name, with or without .mp3 extension"""
         sound_path = self.sound_dir / sound_name
 
         # Try exact name first
         if self._verify_sound_file(sound_path):
             return sound_path
 
-        # Try with .wav extension
-        wav_path = sound_path.with_suffix('.wav')
-        if self._verify_sound_file(wav_path):
-            return wav_path
+        # Try with .mp3 extension
+        mp3_path = sound_path.with_suffix('.mp3')
+        if self._verify_sound_file(mp3_path):
+            return mp3_path
 
         return None
 
@@ -189,8 +187,9 @@ class SoundSystem:
             # Set flag before starting playback
             self._sound_playing = True
             
+            # Use mpg123 with quiet output (-q) and no fancy terminal output (-C)
             process = subprocess.Popen(
-                [self.aplay_path, '-D', 'plughw:0,0', str(sound_path)],
+                [self.mpg123_path, '-q', '-C', str(sound_path)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
@@ -215,8 +214,8 @@ class SoundSystem:
 
     def cmd_PLAY_SOUND(self, gcmd):
         """Handle PLAY_SOUND command"""
-        if not self.aplay_path:
-            raise gcmd.error("aplay not available")
+        if not self.mpg123_path:
+            raise gcmd.error("mpg123 not available")
 
         # Check if NOW flag is set
         force_now = gcmd.get_int('NOW', 0)
@@ -240,9 +239,9 @@ class SoundSystem:
             self.logger.info("Force playing new sound, stopping current playback")
             try:
                 for proc in psutil.process_iter(['pid', 'name']):
-                    if proc.info['name'] == 'aplay':
+                    if proc.info['name'] == 'mpg123':
                         os.kill(proc.info['pid'], signal.SIGTERM)
-                        self.logger.info(f"Killed existing aplay process: {proc.info['pid']}")
+                        self.logger.info(f"Killed existing mpg123 process: {proc.info['pid']}")
                 self._sound_playing = False
             except Exception as e:
                 self.logger.error(f"Error killing existing sound: {e}")
@@ -269,7 +268,7 @@ class SoundSystem:
         msg = [f"Sound directory: {self.sound_dir}\n", "Available sounds:"]
 
         try:
-            for sound_file in sorted(self.sound_dir.glob("*.wav")):
+            for sound_file in sorted(self.sound_dir.glob("*.mp3")):
                 status = "✓" if self._verify_sound_file(sound_file) else "✗"
                 msg.append(f"{status} {sound_file.name}")
         except Exception as e:

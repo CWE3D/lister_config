@@ -96,7 +96,7 @@ log_message() {
 install_system_deps() {
     log_message "INFO" "Installing system dependencies..." "INSTALL"
     apt-get update
-    apt-get install -y git-lfs alsa-utils python3-pip mpv
+    apt-get install -y git-lfs alsa-utils python3-pip mpv mpg123
 }
 
 # Function to install Python requirements
