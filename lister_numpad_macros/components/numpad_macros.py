@@ -103,6 +103,9 @@ class NumpadMacros:
         self._pending_z_offset_save = False
         self._last_z_adjust_time = 0.0
         self._accumulated_z_adjust = 0.0
+        
+        # Add tracking for loaded finetune value
+        self._current_finetune_nozzle_offset = 0.0
 
         # Register endpoints
         self.server.register_endpoint(
@@ -357,7 +360,7 @@ class NumpadMacros:
                         adjustment = -self.z_adjust_increment
                         await self._execute_gcode('_NEARER_KNOB_FIRST_LAYER')
 
-                    # We should add the trigger here
+                    # Track the adjustment
                     self._accumulated_z_adjust += adjustment
                     self._pending_z_offset_save = True
                     self._last_z_adjust_time = time.time()
@@ -505,42 +508,38 @@ class NumpadMacros:
         self._reset_state()
 
     async def _delayed_save_z_offset(self) -> None:
-        """Save the Z adjustment by modifying probed_max_z_height and knob_tuned_z_offset"""
+        """Save the accumulated Z adjustment to finetune_z_nozzle_offset variable"""
         try:
             # Wait for the delay period
             await asyncio.sleep(self.z_offset_save_delay)
 
             # Only proceed if this is the most recent adjustment
             if self._pending_z_offset_save:
-                # Get current values
+                # Get current finetune_z_nozzle_offset
                 kapis: KlippyAPI = self.server.lookup_component('klippy_apis')
                 result = await kapis.query_objects({'save_variables': None})
-                variables = result.get('save_variables', {}).get('variables', {})
-                current_true_max = variables.get('probed_max_z_height', 0.0)
+                current_offset = result.get('save_variables', {}).get('variables', {}).get('finetune_z_nozzle_offset', 0.0)
                 
-                # For positive adjustment (up), subtract from probed_max_z_height
-                # For negative adjustment (down), add to probed_max_z_height
-                new_true_max = float(current_true_max) - self._accumulated_z_adjust
+                # Add the accumulated adjustment to current offset
+                new_offset = float(current_offset) + self._accumulated_z_adjust
 
-                # Save both values
-                # await self._execute_gcode(
-                #     f'SAVE_VARIABLE VARIABLE=knob_tuned_z_offset VALUE={new_knob_offset}'
-                # )
+                # Save the new finetune_z_nozzle_offset
                 await self._execute_gcode(
-                    f'SAVE_VARIABLE VARIABLE=probed_max_z_height VALUE={new_true_max}'
+                    f'SAVE_VARIABLE VARIABLE=finetune_z_nozzle_offset VALUE={new_offset}'
                 )
 
                 if self.debug_log:
                     self.logger.debug(
-                        f"Adjusted values: probed_max_z_height: {current_true_max} -> {new_true_max} "
+                        f"Updated finetune_z_nozzle_offset: current({current_offset}) adjusted by "
+                        f"({self._accumulated_z_adjust}) = new({new_offset})"
                     )
 
+                # Update our tracking of current value
+                self._current_finetune_nozzle_offset = new_offset
+                
                 # Reset tracking variables
                 self._accumulated_z_adjust = 0.0
                 self._pending_z_offset_save = False
-
-                # Update park_z with new probed_max_z_height
-                await self._execute_gcode('UPDATE_PARK_Z')
 
         except Exception as e:
             self.logger.exception("Error saving Z adjustment")
