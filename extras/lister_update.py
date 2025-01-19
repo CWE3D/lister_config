@@ -38,10 +38,11 @@ class ListerUpdate:
             # Make script executable first
             self._make_executable()
             
-            # Run the update command
+            # Run the update command with shell=True to handle sudo properly
             cmd = f"sudo {self.lister_script} {mode}"
             process = subprocess.Popen(
-                cmd.split(),
+                cmd,
+                shell=True,  # Use shell to handle sudo
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
@@ -76,11 +77,17 @@ class ListerUpdate:
     def _make_executable(self):
         """Make the lister.sh script executable"""
         try:
-            subprocess.run(
-                ['sudo', 'chmod', '+x', self.lister_script],
+            # Use shell=True to handle sudo properly
+            result = subprocess.run(
+                f"sudo chmod +x {self.lister_script}",
+                shell=True,
                 check=True,
+                capture_output=True,
+                text=True,
                 timeout=10
             )
+            if result.returncode != 0:
+                raise RuntimeError(f"chmod failed: {result.stderr}")
         except subprocess.SubprocessError as e:
             logging.exception("Error making lister.sh executable")
             raise RuntimeError(f"Failed to make lister.sh executable: {str(e)}")
