@@ -276,6 +276,8 @@ fix_script_permissions() {
     chmod +x "${LISTER_CONFIG_DIR}/lister.sh"
     chmod +x "${LISTER_CONFIG_DIR}/cleanup.sh"
     chmod +x "${LISTER_CONFIG_DIR}/logs.sh"
+    chmod +x "${LISTER_UPDATE_DIR}/lister_update_service.py"
+    chmod +x "${NUMPAD_DIR}/extras/numpad_event_service.py"
     log_message "INFO" "Made shell scripts executable" "INSTALL"
 }
 
@@ -291,6 +293,12 @@ fix_permissions() {
     chown -R pi:pi "$CONFIG_DIR"
     chown -R pi:pi "$LOG_DIR"
     chown -R pi:pi "$PRINTABLES_INSTALL_DIR"
+    
+    # Set specific permissions for service scripts
+    chown root:root "${LISTER_UPDATE_DIR}/lister_update_service.py"
+    chown root:root "${NUMPAD_DIR}/extras/numpad_event_service.py"
+    chmod 755 "${LISTER_UPDATE_DIR}/lister_update_service.py"
+    chmod 755 "${NUMPAD_DIR}/extras/numpad_event_service.py"
     
     # Fix symlink permissions
     # chown -h pi:pi "${KLIPPER_DIR}/klippy/extras/"*.py
