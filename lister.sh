@@ -245,10 +245,9 @@ setup_services() {
     
     # Enable and start services
     systemctl enable numpad_event_service.service
-    systemctl enable lister_update_service.service
+    systemctl enable lister_update_service@.service  # Enable the template service
     
     systemctl start numpad_event_service.service
-    systemctl start lister_update_service.service
     
     # Verify setup after everything is in place
     verify_numpad_setup || {
@@ -323,8 +322,6 @@ restart_services() {
     systemctl restart moonraker
     sleep 2
     systemctl restart numpad_event_service
-    sleep 2
-    systemctl restart lister_update_service
 }
 
 # Function to verify services
@@ -363,7 +360,7 @@ verify_services() {
         log_message "INFO" "Lister Update component is installed" "INSTALL"
     fi
 
-    for service in klipper moonraker numpad_event_service lister_update_service; do
+    for service in klipper moonraker numpad_event_service; do
         if ! systemctl is-active --quiet "$service"; then
             log_message "ERROR" "$service failed to start" "INSTALL"
             all_good=false
@@ -710,9 +707,9 @@ verify_lister_update_setup() {
         return 1
     fi
     
-    # Check if service is enabled and running
-    if ! systemctl is-enabled --quiet lister_update_service; then
-        log_message "ERROR" "Lister update service is not enabled" "INSTALL"
+    # Verify service is installed and enabled in systemd
+    if ! systemctl is-enabled --quiet lister_update_service@.service; then
+        log_message "ERROR" "Lister update service template not enabled" "INSTALL"
         return 1
     fi
     
