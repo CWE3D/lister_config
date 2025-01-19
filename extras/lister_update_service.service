@@ -5,9 +5,10 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/home/pi/lister_config/extras/lister_update_service.py
+ExecStart=/usr/bin/python3 /home/pi/lister_config/extras/lister_update_service.py
 Restart=always
-RestartSec=10
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
