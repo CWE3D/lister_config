@@ -55,13 +55,29 @@ class ListerUpdateService:
                 [self.lister_script, mode],
                 capture_output=True,
                 text=True,
-                check=True
+                check=False  # Don't raise on non-zero exit
             )
-            logging.info(f"Update completed successfully: {result.stdout}")
+            
+            # Log the complete output
+            if result.stdout:
+                logging.info(f"Command output: {result.stdout}")
+            if result.stderr:
+                logging.error(f"Command error output: {result.stderr}")
+            
+            if result.returncode != 0:
+                error_msg = f"Command failed with code {result.returncode}"
+                if result.stderr:
+                    error_msg += f": {result.stderr}"
+                logging.error(error_msg)
+                raise RuntimeError(error_msg)
+                
+            logging.info(f"Update completed successfully")
             return {"status": "success", "output": result.stdout}
-        except subprocess.CalledProcessError as e:
-            logging.error(f"Update failed: {e.stderr}")
-            raise RuntimeError(f"Update failed: {e.stderr}")
+            
+        except subprocess.SubprocessError as e:
+            error_msg = f"Update failed: {str(e)}"
+            logging.error(error_msg)
+            raise RuntimeError(error_msg)
 
 def main():
     parser = argparse.ArgumentParser(description="Lister Update Service")
