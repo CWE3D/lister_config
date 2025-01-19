@@ -13,10 +13,6 @@ class ListerUpdate:
         self.printer = config.get_printer()
         self.gcode = self.printer.lookup_object('gcode')
         
-        # Set up paths
-        self.lister_config_dir = "/home/pi/lister_config"
-        self.update_service = "/home/pi/lister_config/extras/lister_update_service.py"
-        
         # Register commands
         self.gcode.register_command(
             'UPDATE_LISTER', 
@@ -35,9 +31,9 @@ class ListerUpdate:
             raise gcmd.error(f"Invalid mode: {mode}. Must be one of: {', '.join(valid_modes)}")
         
         try:
-            # Call the update service
+            # Call the service through systemctl
             process = subprocess.Popen(
-                ['/usr/bin/python3', self.update_service, mode],
+                ['sudo', 'systemctl', 'start', '--no-block', f'lister_update_service@{mode}'],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
@@ -46,9 +42,22 @@ class ListerUpdate:
             try:
                 stdout, stderr = process.communicate(timeout=300)
                 
-                if process.returncode != 0:
+                # Check service status
+                status_proc = subprocess.run(
+                    ['systemctl', 'is-active', f'lister_update_service@{mode}'],
+                    capture_output=True,
+                    text=True
+                )
+                
+                if status_proc.returncode != 0:
+                    # Get service logs if failed
+                    log_proc = subprocess.run(
+                        ['journalctl', '-u', f'lister_update_service@{mode}', '-n', '50', '--no-pager'],
+                        capture_output=True,
+                        text=True
+                    )
                     raise gcmd.error(
-                        f"Lister update failed: {stderr}"
+                        f"Lister update failed. Service logs:\n{log_proc.stdout}"
                     )
                 
                 # Restart Klipper if needed
@@ -56,8 +65,7 @@ class ListerUpdate:
                     self._restart_klipper(gcmd)
                 
                 gcmd.respond_info(
-                    f"Lister update ({mode}) completed successfully\n"
-                    f"Output: {stdout}"
+                    f"Lister update ({mode}) completed successfully"
                 )
                 
             except subprocess.TimeoutExpired:

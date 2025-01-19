@@ -1,13 +1,12 @@
 [Unit]
-Description=Lister Update Service
+Description=Lister Update Service %I
 After=network.target
 
 [Service]
-Type=simple
+Type=oneshot
 User=root
-ExecStart=/usr/bin/python3 /home/pi/lister_config/extras/lister_update_service.py
-Restart=always
-RestartSec=5
+ExecStart=/usr/bin/python3 /home/pi/lister_config/extras/lister_update_service.py %i
+RemainAfterExit=no
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
