@@ -37,7 +37,7 @@ class ListerUpdate:
         try:
             # Call the update service
             process = subprocess.Popen(
-                [self.update_service, mode],
+                ['/usr/bin/python3', self.update_service, mode],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
