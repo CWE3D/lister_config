@@ -15,7 +15,7 @@ class ListerUpdate:
         
         # Set up paths
         self.lister_config_dir = "/home/pi/lister_config"
-        self.lister_script = os.path.join(self.lister_config_dir, "lister.sh")
+        self.update_service = "/home/pi/lister_config/extras/lister_update_service.py"
         
         # Register commands
         self.gcode.register_command(
@@ -35,26 +35,20 @@ class ListerUpdate:
             raise gcmd.error(f"Invalid mode: {mode}. Must be one of: {', '.join(valid_modes)}")
         
         try:
-            # Make script executable first
-            self._make_executable()
-            
-            # Run the update command with shell=True to handle sudo properly
-            cmd = f"sudo {self.lister_script} {mode}"
+            # Call the update service
             process = subprocess.Popen(
-                cmd,
-                shell=True,  # Use shell to handle sudo
+                [self.update_service, mode],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
             )
             
-            # Wait for completion with timeout
             try:
-                stdout, stderr = process.communicate(timeout=300)  # 5 minute timeout
+                stdout, stderr = process.communicate(timeout=300)
                 
                 if process.returncode != 0:
                     raise gcmd.error(
-                        f"Lister update failed (code {process.returncode}): {stderr}"
+                        f"Lister update failed: {stderr}"
                     )
                 
                 # Restart Klipper if needed
@@ -73,24 +67,6 @@ class ListerUpdate:
         except Exception as e:
             logging.exception("Error during Lister update")
             raise gcmd.error(f"Lister update failed: {str(e)}")
-
-    def _make_executable(self):
-        """Make the lister.sh script executable"""
-        try:
-            # Use shell=True to handle sudo properly
-            result = subprocess.run(
-                f"sudo chmod +x {self.lister_script}",
-                shell=True,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if result.returncode != 0:
-                raise RuntimeError(f"chmod failed: {result.stderr}")
-        except subprocess.SubprocessError as e:
-            logging.exception("Error making lister.sh executable")
-            raise RuntimeError(f"Failed to make lister.sh executable: {str(e)}")
 
     def _restart_klipper(self, gcmd):
         """Restart Klipper"""

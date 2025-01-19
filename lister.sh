@@ -213,6 +213,13 @@ setup_services() {
         echo "uinput" >> /etc/modules
     fi
     
+    # Setup lister update service
+    ln -sf "${LISTER_CONFIG_DIR}/extras/lister_update_service.service" \
+        "/etc/systemd/system/lister_update_service.service"
+    chmod +x "${LISTER_CONFIG_DIR}/extras/lister_update_service.py"
+    systemctl enable lister_update_service.service
+    systemctl start lister_update_service.service
+    
     # Setup symlinks first (only for Moonraker component)
     ln -sf "${NUMPAD_DIR}/components/numpad_macros.py" \
         "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py"
@@ -285,6 +292,8 @@ restart_services() {
     systemctl restart moonraker
     sleep 2
     systemctl restart numpad_event_service
+    sleep 2
+    systemctl restart lister_update_service
 }
 
 # Function to verify services
@@ -315,7 +324,15 @@ verify_services() {
         log_message "INFO" "Z Force Move component is installed" "INSTALL"
     fi
 
-    for service in klipper moonraker numpad_event_service; do
+    # Check lister_update component
+    if [ ! -L "${KLIPPER_DIR}/klippy/extras/lister_update.py" ]; then
+        log_message "ERROR" "Lister Update component not installed" "INSTALL"
+        all_good=false
+    else
+        log_message "INFO" "Lister Update component is installed" "INSTALL"
+    fi
+
+    for service in klipper moonraker numpad_event_service lister_update_service; do
         if ! systemctl is-active --quiet "$service"; then
             log_message "ERROR" "$service failed to start" "INSTALL"
             all_good=false

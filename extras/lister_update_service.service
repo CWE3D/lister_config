@@ -1,0 +1,13 @@
+[Unit]
+Description=Lister Update Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/home/pi/lister_config/extras/lister_update_service.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
