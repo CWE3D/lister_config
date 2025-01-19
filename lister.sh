@@ -18,6 +18,10 @@ MOONRAKER_ENV="/home/pi/moonraker-env"
 EXPECTED_SCRIPT_PATH="/home/pi/lister_config/lister.sh"
 LISTER_GIT_REPO="https://github.com/CWE3D/lister_config.git"
 
+# Lister Update paths
+LISTER_UPDATE_DIR="${LISTER_CONFIG_DIR}/extras"
+LISTER_UPDATE_SERVICE_FILE="${LISTER_UPDATE_DIR}/lister_update_service.service"
+
 # Component paths
 PRINTABLES_DIR="${LISTER_CONFIG_DIR}/lister_printables"
 SOUND_DIR="${LISTER_CONFIG_DIR}/lister_sound_system"
@@ -213,12 +217,13 @@ setup_services() {
         echo "uinput" >> /etc/modules
     fi
     
+    # Setup symlinks first
+    setup_symlinks
+    
     # Setup lister update service
-    ln -sf "${LISTER_CONFIG_DIR}/extras/lister_update_service.service" \
+    ln -sf "$LISTER_UPDATE_SERVICE_FILE" \
         "/etc/systemd/system/lister_update_service.service"
-    chmod +x "${LISTER_CONFIG_DIR}/extras/lister_update_service.py"
-    systemctl enable lister_update_service.service
-    systemctl start lister_update_service.service
+    chmod +x "${LISTER_UPDATE_DIR}/lister_update_service.py"
     
     # Setup symlinks first (only for Moonraker component)
     ln -sf "${NUMPAD_DIR}/components/numpad_macros.py" \
@@ -230,11 +235,22 @@ setup_services() {
     
     # Reload systemd right after creating the service symlink
     systemctl daemon-reload
+    
+    # Enable and start services
     systemctl enable numpad_event_service.service
+    systemctl enable lister_update_service.service
+    
+    systemctl start numpad_event_service.service
+    systemctl start lister_update_service.service
     
     # Verify setup after everything is in place
     verify_numpad_setup || {
         log_message "ERROR" "Numpad setup verification failed" "INSTALL"
+        return 1
+    }
+    
+    verify_lister_update_setup || {
+        log_message "ERROR" "Lister update setup verification failed" "INSTALL"
         return 1
     }
 }
@@ -664,6 +680,33 @@ init_git_repository() {
         log_message "INFO" "Git repository initialized successfully" "INSTALL"
     else
         log_message "INFO" "Local git repository exists but not fully configured" "INSTALL"
+    fi
+    
+    return 0
+}
+
+# Function to verify lister update setup
+verify_lister_update_setup() {
+    log_message "INFO" "Verifying lister update setup..." "INSTALL"
+    
+    # Verify service file
+    if [ ! -L "/etc/systemd/system/lister_update_service.service" ]; then
+        log_message "ERROR" "Lister update service symlink not found" "INSTALL"
+        return 1
+    fi
+    
+    # Check if service is enabled and running
+    if ! systemctl is-enabled --quiet lister_update_service; then
+        log_message "ERROR" "Lister update service is not enabled" "INSTALL"
+        return 1
+    fi
+    
+    # Verify log file setup
+    local update_log="/home/pi/printer_data/logs/lister_update_service.log"
+    if [ ! -f "$update_log" ]; then
+        touch "$update_log"
+        chown pi:pi "$update_log"
+        chmod 644 "$update_log"
     fi
     
     return 0
