@@ -52,7 +52,7 @@ class ListerUpdateService:
         try:
             logging.info(f"Running lister update with mode: {mode}")
             result = subprocess.run(
-                ['sudo', self.lister_script, mode],
+                [self.lister_script, mode],
                 capture_output=True,
                 text=True,
                 check=False  # Don't raise on non-zero exit
