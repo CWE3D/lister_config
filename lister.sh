@@ -220,18 +220,25 @@ setup_services() {
     # Setup symlinks first
     setup_symlinks
     
-    # Setup lister update service
-    ln -sf "$LISTER_UPDATE_SERVICE_FILE" \
-        "/etc/systemd/system/lister_update_service.service"
-    chmod +x "${LISTER_UPDATE_DIR}/lister_update_service.py"
+    # Remove old service symlinks if they exist
+    if [ -L "/etc/systemd/system/lister_update_service.service" ]; then
+        log_message "INFO" "Removing old lister update service symlink..." "INSTALL"
+        rm -f "/etc/systemd/system/lister_update_service.service"
+    fi
+    
+    if [ -L "/etc/systemd/system/numpad_event_service.service" ]; then
+        log_message "INFO" "Removing old numpad service symlink..." "INSTALL"
+        rm -f "/etc/systemd/system/numpad_event_service.service"
+    fi
+    
+    # Copy service files
+    log_message "INFO" "Installing service files..." "INSTALL"
+    cp -f "$LISTER_UPDATE_SERVICE_FILE" "/etc/systemd/system/lister_update_service.service"
+    cp -f "$SERVICE_FILE" "/etc/systemd/system/numpad_event_service.service"
     
     # Setup symlinks first (only for Moonraker component)
     ln -sf "${NUMPAD_DIR}/components/numpad_macros.py" \
         "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py"
-    
-    # Then setup numpad event service
-    ln -sf "$SERVICE_FILE" \
-        "/etc/systemd/system/numpad_event_service.service"
     
     # Reload systemd right after creating the service symlink
     systemctl daemon-reload
@@ -286,8 +293,8 @@ fix_permissions() {
     chown -R pi:pi "$PRINTABLES_INSTALL_DIR"
     
     # Fix symlink permissions
-    chown -h pi:pi "${KLIPPER_DIR}/klippy/extras/"*.py
-    chown -h pi:pi "${MOONRAKER_DIR}/moonraker/components/"*.py
+    # chown -h pi:pi "${KLIPPER_DIR}/klippy/extras/"*.py
+    # chown -h pi:pi "${MOONRAKER_DIR}/moonraker/components/"*.py
     
     # Make sure scripts are executable
     fix_script_permissions
@@ -689,8 +696,8 @@ init_git_repository() {
 verify_lister_update_setup() {
     log_message "INFO" "Verifying lister update setup..." "INSTALL"
     
-    # Verify service file
-    if [ ! -L "/etc/systemd/system/lister_update_service.service" ]; then
+    # Verify service file exists as regular file
+    if [ ! -f "/etc/systemd/system/lister_update_service.service" ]; then
         log_message "ERROR" "Lister update service symlink not found" "INSTALL"
         return 1
     fi
