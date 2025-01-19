@@ -193,6 +193,10 @@ setup_symlinks() {
     ln -sf "${LISTER_CONFIG_DIR}/extras/z_force_move.py" \
         "${KLIPPER_DIR}/klippy/extras/z_force_move.py"
         
+    # Lister Update link
+    ln -sf "${LISTER_CONFIG_DIR}/extras/lister_update.py" \
+        "${KLIPPER_DIR}/klippy/extras/lister_update.py"
+        
     # Reload systemd after setting up symlinks
     systemctl daemon-reload
 }
