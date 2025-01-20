@@ -501,6 +501,12 @@ verify_system_requirements() {
         return 1
     fi
     
+    # Check for git-lfs
+    if ! command -v git-lfs >/dev/null 2>&1; then
+        log_message "ERROR" "Git LFS is not installed" "INSTALL"
+        return 1
+    }
+    
     # Check disk space (need at least 500MB free)
     local free_space=$(df -m /home/pi | awk 'NR==2 {print $4}')
     if [ "$free_space" -lt 500 ]; then
@@ -722,8 +728,12 @@ main() {
     
     case "$MODE" in
         "install")
-            # Clear log file at the start of install
+            # At the start of install/update cases, before clearing log
+            mkdir -p "$LOG_DIR"
             > "$LOG_FILE"
+            chown pi:pi "$LOG_FILE"
+            chmod 644 "$LOG_FILE"
+            
             log_message "INFO" "Starting installation process..." "INSTALL"
             
             # System setup
@@ -777,8 +787,12 @@ main() {
             exit 0
             ;;
         "update")
-            # Clear log file at the start of update
+            # At the start of install/update cases, before clearing log
+            mkdir -p "$LOG_DIR"
             > "$LOG_FILE"
+            chown pi:pi "$LOG_FILE"
+            chmod 644 "$LOG_FILE"
+            
             log_message "INFO" "Starting update process..." "INSTALL"
             
             # Initialize and update repository
