@@ -505,7 +505,7 @@ verify_system_requirements() {
     if ! command -v git-lfs >/dev/null 2>&1; then
         log_message "ERROR" "Git LFS is not installed" "INSTALL"
         return 1
-    }
+    fi
     
     # Check disk space (need at least 500MB free)
     local free_space=$(df -m /home/pi | awk 'NR==2 {print $4}')
