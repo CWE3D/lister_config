@@ -5,7 +5,9 @@ After=network.target
 [Service]
 Type=oneshot
 User=root
-ExecStart=/home/pi/lister_config/lister.sh refresh
+ExecStart=/home/pi/lister_config/lister.sh update
+StandardOutput=append:/home/pi/printer_data/logs/lister_update_service.log
+StandardError=append:/home/pi/printer_data/logs/lister_update_service.log
 RemainAfterExit=no
 Environment=PYTHONUNBUFFERED=1
 

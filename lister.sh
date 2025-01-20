@@ -205,124 +205,6 @@ setup_symlinks() {
     systemctl daemon-reload
 }
 
-# Function to setup services
-setup_services() {
-    log_message "INFO" "Setting up services..." "INSTALL"
-    
-    # Load required kernel module
-    modprobe uinput
-    
-    # Add module to load at boot
-    if ! grep -q "uinput" /etc/modules; then
-        echo "uinput" >> /etc/modules
-    fi
-    
-    # Setup symlinks first
-    setup_symlinks
-    
-    # Remove old service symlinks if they exist
-    if [ -L "/etc/systemd/system/lister_update_service.service" ]; then
-        log_message "INFO" "Removing old lister update service symlink..." "INSTALL"
-        rm -f "/etc/systemd/system/lister_update_service.service"
-    fi
-    
-    if [ -L "/etc/systemd/system/numpad_event_service.service" ]; then
-        log_message "INFO" "Removing old numpad service symlink..." "INSTALL"
-        rm -f "/etc/systemd/system/numpad_event_service.service"
-    fi
-    
-    # Copy service files
-    log_message "INFO" "Installing service files..." "INSTALL"
-    cp -f "$LISTER_UPDATE_SERVICE_FILE" "/etc/systemd/system/lister_update_service.service"
-    cp -f "$SERVICE_FILE" "/etc/systemd/system/numpad_event_service.service"
-    
-    # Setup symlinks first (only for Moonraker component)
-    ln -sf "${NUMPAD_DIR}/components/numpad_macros.py" \
-        "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py"
-    
-    # Reload systemd right after creating the service symlink
-    systemctl daemon-reload
-    
-    # Enable and start services
-    systemctl enable numpad_event_service.service
-    
-    systemctl start numpad_event_service.service
-    
-    # Verify setup after everything is in place
-    verify_numpad_setup || {
-        log_message "ERROR" "Numpad setup verification failed" "INSTALL"
-        return 1
-    }
-    
-    verify_lister_update_setup || {
-        log_message "ERROR" "Lister update setup verification failed" "INSTALL"
-        return 1
-    }
-}
-
-# Function to fix script permissions
-fix_script_permissions() {
-    log_message "INFO" "Setting script permissions..." "INSTALL"
-    
-    # Reset git repository state first
-    # if [ -d "${LISTER_CONFIG_DIR}/.git" ]; then
-    #     cd "${LISTER_CONFIG_DIR}" && git checkout -- .
-    #     log_message "INFO" "Reset git repository state" "INSTALL"
-    # fi
-    
-    # Make scripts executable after git reset
-    chmod +x "${LISTER_CONFIG_DIR}/lister.sh"
-    chmod +x "${LISTER_CONFIG_DIR}/cleanup.sh"
-    chmod +x "${LISTER_CONFIG_DIR}/logs.sh"
-    chmod +x "${LISTER_UPDATE_DIR}/lister_update_service.py"
-    chmod +x "${NUMPAD_DIR}/extras/numpad_event_service.py"
-    log_message "INFO" "Made shell scripts executable" "INSTALL"
-}
-
-# Function to fix permissions
-fix_permissions() {
-    log_message "INFO" "Setting permissions..." "INSTALL"
-    
-    # Add user pi to input group
-    usermod -a -G input pi
-    
-    # Set ownership
-    chown -R pi:pi "$LISTER_CONFIG_DIR"
-    chown -R pi:pi "$CONFIG_DIR"
-    chown -R pi:pi "$LOG_DIR"
-    chown -R pi:pi "$PRINTABLES_INSTALL_DIR"
-    
-    # Set specific permissions for service scripts
-    chown root:root "${LISTER_UPDATE_DIR}/lister_update_service.py"
-    chown root:root "${NUMPAD_DIR}/extras/numpad_event_service.py"
-    chmod 755 "${LISTER_UPDATE_DIR}/lister_update_service.py"
-    chmod 755 "${NUMPAD_DIR}/extras/numpad_event_service.py"
-    
-    # Fix symlink permissions
-    # chown -h pi:pi "${KLIPPER_DIR}/klippy/extras/"*.py
-    # chown -h pi:pi "${MOONRAKER_DIR}/moonraker/components/"*.py
-    
-    # Make sure scripts are executable
-    fix_script_permissions
-}
-
-# Function to restart services
-restart_services() {
-    log_message "INFO" "Restarting services..." "INSTALL"
-    
-    # Reload systemd first to handle any unit file changes
-    systemctl daemon-reload
-    log_message "INFO" "Systemd daemon reloaded" "INSTALL"
-    
-    sleep 2  # Give systemd time to process the reload
-    
-    systemctl restart klipper
-    sleep 2
-    systemctl restart moonraker
-    sleep 2
-    systemctl restart numpad_event_service
-}
-
 # Function to verify services
 verify_services() {
     local all_good=true
@@ -359,6 +241,7 @@ verify_services() {
         log_message "INFO" "Lister Update component is installed" "INSTALL"
     fi
 
+    # Only check active services that need to be running
     for service in klipper moonraker numpad_event_service; do
         if ! systemctl is-active --quiet "$service"; then
             log_message "ERROR" "$service failed to start" "INSTALL"
@@ -372,91 +255,120 @@ verify_services() {
     return $([ "$all_good" = true ])
 }
 
-# Function to update repository with LFS support
-update_repo() {
-    log_message "INFO" "Checking for repository updates..." "INSTALL"
+# Function to verify lister update setup
+verify_lister_update_setup() {
+    log_message "INFO" "Verifying lister update setup..." "INSTALL"
     
-    cd "$LISTER_CONFIG_DIR" || {
-        log_message "ERROR" "Failed to change to repository directory" "INSTALL"
+    # Only verify the service file exists
+    if [ ! -f "/etc/systemd/system/lister_update_service.service" ]; then
+        log_message "ERROR" "Lister update service file not found" "INSTALL"
         return 1
-    }
+    fi
     
-    # Fetch latest changes
-    git fetch
-    
-    # Compare local and remote commit hashes
-    LOCAL=$(git rev-parse HEAD)
-    REMOTE=$(git rev-parse @{u})
-    
-    if [ "$LOCAL" != "$REMOTE" ]; then
-        log_message "INFO" "New updates available. Pulling changes..." "INSTALL"
-        
-        # Reset any local changes (including file modes)
-        git reset --hard
-        git clean -fd
-        
-        # Pull changes
-        git pull --force origin main
-        
-        # Setup and fetch LFS files
-        git lfs install
-        git lfs fetch --all
-        git lfs checkout
-        
-        log_message "INFO" "Repository update completed" "INSTALL"
-    else
-        log_message "INFO" "Repository is already up-to-date." "INSTALL"
+    # Verify log file setup
+    local update_log="/home/pi/printer_data/logs/lister_update_service.log"
+    if [ ! -f "$update_log" ]; then
+        touch "$update_log"
+        chown pi:pi "$update_log"
+        chmod 644 "$update_log"
     fi
     
     return 0
 }
 
-# Function to verify numpad setup
-verify_numpad_setup() {
-    log_message "INFO" "Verifying numpad setup..." "INSTALL"
+# Function to setup services
+setup_services() {
+    log_message "INFO" "Setting up services..." "INSTALL"
     
-    # Ensure no incorrect symlink exists (remove this check as it's not a Klipper plugin)
-    cleanup_incorrect_symlinks
+    # Load required kernel module
+    modprobe uinput
     
-    # Check input group
-    if ! groups pi | grep -q "input"; then
-        log_message "ERROR" "User 'pi' not in input group" "INSTALL"
+    # Add module to load at boot
+    if ! grep -q "uinput" /etc/modules; then
+        echo "uinput" >> /etc/modules
+    fi
+    
+    # Remove old service files if they exist
+    if [ -e "/etc/systemd/system/lister_update_service.service" ]; then
+        log_message "INFO" "Removing old lister update service..." "INSTALL"
+        rm -f "/etc/systemd/system/lister_update_service.service"
+    fi
+    
+    if [ -e "/etc/systemd/system/numpad_event_service.service" ]; then
+        log_message "INFO" "Removing old numpad service..." "INSTALL"
+        rm -f "/etc/systemd/system/numpad_event_service.service"
+    fi
+    
+    # Create service symlinks
+    log_message "INFO" "Creating service symlinks..." "INSTALL"
+    ln -sf "$LISTER_UPDATE_SERVICE_FILE" "/etc/systemd/system/lister_update_service.service"
+    ln -sf "$SERVICE_FILE" "/etc/systemd/system/numpad_event_service.service"
+    
+    # Enable both services (numpad runs continuously, lister_update is oneshot)
+    systemctl enable numpad_event_service.service
+    systemctl enable lister_update_service.service
+    
+    # Only start the numpad service (lister_update is oneshot, runs on demand)
+    systemctl start numpad_event_service.service
+    
+    # Verify setup after everything is in place
+    verify_numpad_setup || {
+        log_message "ERROR" "Numpad setup verification failed" "INSTALL"
         return 1
-    fi
+    }
     
-    # Check keyboard module
-    if ! lsmod | grep -q "uinput"; then
-        log_message "ERROR" "Required kernel module 'uinput' not loaded" "INSTALL"
+    verify_lister_update_setup || {
+        log_message "ERROR" "Lister update setup verification failed" "INSTALL"
         return 1
-    fi
+    }
+}
+
+# Function to fix permissions
+fix_access_permission() {
+    log_message "INFO" "Setting permissions..." "INSTALL"
     
-    # Verify service file
-    if [ ! -L "/etc/systemd/system/numpad_event_service.service" ]; then
-        log_message "ERROR" "Numpad service symlink not found" "INSTALL"
-        return 1
-    fi
+    # Add user pi to input group
+    usermod -a -G input pi
     
-    # Check if service is enabled and running
-    if ! systemctl is-enabled --quiet numpad_event_service; then
-        log_message "ERROR" "Numpad service is not enabled" "INSTALL"
-        return 1
-    fi
+    # Set ownership
+    chown -R pi:pi "$LISTER_CONFIG_DIR"
+    chown -R pi:pi "$CONFIG_DIR"
+    chown -R pi:pi "$LOG_DIR"
+    chown -R pi:pi "$PRINTABLES_INSTALL_DIR"
     
-    # Check component installation (this is the Moonraker component, which is correct)
-    if [ ! -L "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py" ]; then
-        log_message "ERROR" "Numpad component not installed" "INSTALL"
-        return 1
-    fi
+    # Set specific permissions for service scripts
+    chown root:root "${LISTER_UPDATE_DIR}/lister_update_service.py"
+    chown root:root "${NUMPAD_DIR}/extras/numpad_event_service.py"
+}
+
+# Function to fix script permissions
+fix_executable_permissions() {
+    log_message "INFO" "Setting script permissions..." "INSTALL"
     
-    # Verify log file setup
-    local numpad_log="/home/pi/printer_data/logs/numpad_event_service.log"
-    if [ ! -f "$numpad_log" ]; then
-        touch "$numpad_log"
-        chown pi:pi "$numpad_log"
-        chmod 644 "$numpad_log"
-    fi
+    # Make scripts executable after git reset
+    chmod +x "${LISTER_CONFIG_DIR}/lister.sh"
+    chmod +x "${LISTER_CONFIG_DIR}/cleanup.sh"
+    chmod +x "${LISTER_CONFIG_DIR}/logs.sh"
+    chmod +x "${LISTER_UPDATE_DIR}/lister_update_service.py"
+    chmod +x "${NUMPAD_DIR}/extras/numpad_event_service.py"
+    log_message "INFO" "Made shell scripts executable" "INSTALL"
+}
+
+# Function to restart services
+restart_services() {
+    log_message "INFO" "Restarting services..." "INSTALL"
     
-    return 0
+    # Reload systemd first to handle any unit file changes
+    systemctl daemon-reload
+    log_message "INFO" "Systemd daemon reloaded" "INSTALL"
+    
+    sleep 2  # Give systemd time to process the reload
+    
+    systemctl restart klipper
+    sleep 2
+    systemctl restart moonraker
+    sleep 2
+    systemctl restart numpad_event_service
 }
 
 # Function to verify sound system
@@ -634,15 +546,29 @@ restart_all_services() {
     done
 }
 
-# Function to cleanup incorrect symlinks
-cleanup_incorrect_symlinks() {
-    log_message "INFO" "Cleaning up incorrect symlinks..." "INSTALL"
+# Function to cleanup old services and incorrect symlinks
+cleanup_legacy_services() {
+    log_message "INFO" "Cleaning up legacy services and incorrect symlinks..." "INSTALL"
     
     # Remove incorrect numpad service symlink if it exists in Klipper extras
     if [ -L "${KLIPPER_DIR}/klippy/extras/numpad_event_service.py" ]; then
         log_message "WARNING" "Removing incorrect numpad service symlink from Klipper extras" "INSTALL"
         rm -f "${KLIPPER_DIR}/klippy/extras/numpad_event_service.py"
     fi
+
+    # Clean up old lister update service instances
+    local running_services=$(systemctl list-units --full --all | grep "lister_update_service@" | awk '{print $1}')
+    if [ ! -z "$running_services" ]; then
+        log_message "INFO" "Cleaning up old lister update service instances..." "INSTALL"
+        for service in $running_services; do
+            log_message "INFO" "Stopping and disabling $service" "INSTALL"
+            systemctl stop "$service"
+            systemctl disable "$service"
+        done
+    fi
+
+    # Reload systemd to apply changes
+    systemctl daemon-reload
 }
 
 # Add this new function
@@ -696,28 +622,46 @@ init_git_repository() {
     return 0
 }
 
-# Function to verify lister update setup
-verify_lister_update_setup() {
-    log_message "INFO" "Verifying lister update setup..." "INSTALL"
+# Function to verify numpad setup
+verify_numpad_setup() {
+    log_message "INFO" "Verifying numpad setup..." "INSTALL"
     
-    # Verify service file exists as regular file
-    if [ ! -f "/etc/systemd/system/lister_update_service.service" ]; then
-        log_message "ERROR" "Lister update service symlink not found" "INSTALL"
+    # Check input group
+    if ! groups pi | grep -q "input"; then
+        log_message "ERROR" "User 'pi' not in input group" "INSTALL"
         return 1
     fi
     
-    # Verify service is installed in systemd
-    if ! systemctl list-unit-files | grep -q "lister_update_service@.service"; then
-        log_message "ERROR" "Lister update service not properly installed" "INSTALL"
+    # Check keyboard module
+    if ! lsmod | grep -q "uinput"; then
+        log_message "ERROR" "Required kernel module 'uinput' not loaded" "INSTALL"
+        return 1
+    fi
+    
+    # Verify service file
+    if [ ! -L "/etc/systemd/system/numpad_event_service.service" ]; then
+        log_message "ERROR" "Numpad service symlink not found" "INSTALL"
+        return 1
+    fi
+    
+    # Check if service is enabled and running
+    if ! systemctl is-enabled --quiet numpad_event_service; then
+        log_message "ERROR" "Numpad service is not enabled" "INSTALL"
+        return 1
+    fi
+    
+    # Check component installation (this is the Moonraker component, which is correct)
+    if [ ! -L "${MOONRAKER_DIR}/moonraker/components/numpad_macros.py" ]; then
+        log_message "ERROR" "Numpad component not installed" "INSTALL"
         return 1
     fi
     
     # Verify log file setup
-    local update_log="/home/pi/printer_data/logs/lister_update_service.log"
-    if [ ! -f "$update_log" ]; then
-        touch "$update_log"
-        chown pi:pi "$update_log"
-        chmod 644 "$update_log"
+    local numpad_log="/home/pi/printer_data/logs/numpad_event_service.log"
+    if [ ! -f "$numpad_log" ]; then
+        touch "$numpad_log"
+        chown pi:pi "$numpad_log"
+        chmod 644 "$numpad_log"
     fi
     
     return 0
@@ -738,16 +682,31 @@ main() {
     
     case "$MODE" in
         "install")
+            log_message "INFO" "Starting installation process..." "INSTALL"
+            
+            # System setup
             install_system_deps
             install_python_deps
+            
+            # Initialize repository
             init_git_repository || {
                 log_message "ERROR" "Git repository initialization failed" "INSTALL"
                 exit 1
             }
+            
+            # Clean any existing services/symlinks
+            cleanup_legacy_services
+            
+            # Setup components and services
             setup_services || {
                 log_message "ERROR" "Service setup failed" "INSTALL"
                 exit 1
             }
+            
+            # Setup symlinks
+            setup_symlinks
+            
+            # Setup additional components
             setup_sound_system || {
                 log_message "ERROR" "Sound system setup failed" "INSTALL"
                 exit 1
@@ -756,9 +715,29 @@ main() {
                 log_message "ERROR" "Printables verification failed" "INSTALL"
                 exit 1
             }
-            fix_script_permissions
+            
+            # Sync and configure
+            sync_config_files || {
+                log_message "ERROR" "Config sync failed" "INSTALL"
+                exit 1
+            }
+            
+            # Fix permissions
+            fix_access_permission
+            fix_executable_permissions
+            
+            # Reload and verify
+            systemctl daemon-reload
+            restart_services
+            verify_services
+            
+            log_message "INFO" "Installation complete" "INSTALL"
+            exit 0
             ;;
-        "refresh")
+        "update")
+            log_message "INFO" "Starting update process..." "INSTALL"
+            
+            # Initialize and update repository
             init_git_repository || {
                 log_message "ERROR" "Git repository initialization failed" "INSTALL"
                 exit 1
@@ -767,73 +746,60 @@ main() {
                 log_message "ERROR" "Failed to update repository" "INSTALL"
                 exit 1
             }
-            cleanup_incorrect_symlinks
-            fix_script_permissions
-            restart_services
-            ;;
-        "sync")
-            log_message "INFO" "Updating repository before sync..." "INSTALL"
-            update_repo || {
-                log_message "ERROR" "Failed to update repository" "INSTALL"
-                exit 1
-            }
             
-            log_message "INFO" "Syncing files..." "INSTALL"
+            # Clean and sync
+            cleanup_legacy_services
             sync_config_files || {
                 log_message "ERROR" "Config sync failed" "INSTALL"
                 exit 1
             }
+            
+            # Setup symlinks
             setup_symlinks
-            fix_permissions
-            fix_script_permissions
-            log_message "INFO" "Sync complete" "INSTALL"
+            
+            # Fix permissions
+            fix_access_permission
+            fix_executable_permissions
+            
+            # Reload and verify
+            systemctl daemon-reload
+            restart_services
+            verify_services
+            
+            log_message "INFO" "Update complete" "INSTALL"
             exit 0
             ;;
         "restart")
             restart_all_services
-            fix_script_permissions
+            fix_executable_permissions
             exit 0
             ;;
         "permissions")
-            fix_permissions
-            fix_script_permissions
+            fix_access_permission
+            fix_executable_permissions
             log_message "INFO" "Permissions reset complete" "INSTALL"
             exit 0
             ;;
         *)
-            echo "Usage: $0 {install|refresh|sync|restart|permissions}"
+            echo "Usage: $0 {install|update|restart|permissions}"
             exit 1
             ;;
     esac
-    
-    # Common operations for install and refresh
-    if [ "$MODE" != "sync" ]; then
-        sync_config_files || {
-            log_message "ERROR" "Config sync failed" "INSTALL"
-            exit 1
-        }
-        setup_symlinks
-        fix_permissions
-        fix_script_permissions
-        
-        restart_services
-        verify_services
-        
-        log_message "INFO" "${MODE^} complete" "INSTALL"
-    fi
 }
 
 # Script entry point
 case "$1" in
-    "install"|"refresh"|"sync"|"restart"|"permissions")
+    "install"|"update"|"restart"|"permissions")
         MODE="$1"
         main
         ;;
+    "refresh"|"sync")  # Handle old commands for backward compatibility
+        log_message "WARNING" "The '$1' command is deprecated. Please use 'update' instead." "INSTALL"
+        MODE="update"
+        main
+        ;;
     *)
-        echo "Usage: $0 {install|refresh|sync|restart|permissions}"
+        echo "Usage: $0 {install|update|restart|permissions}"
         exit 1
         ;;
 esac
-
-# Ensure the script is executable
-fix_script_permissions
