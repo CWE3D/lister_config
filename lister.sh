@@ -754,6 +754,12 @@ main() {
                 exit 1
             }
             
+            # Setup components and services
+            setup_services || {
+                log_message "ERROR" "Service setup failed" "INSTALL"
+                exit 1
+            }
+            
             # Setup symlinks
             setup_symlinks
             
