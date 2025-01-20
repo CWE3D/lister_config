@@ -52,7 +52,7 @@ class ListerUpdate:
                     )
                 
                 # Restart Klipper
-                self._restart_klipper(gcmd)
+                # self._restart_klipper(gcmd)
                 
                 gcmd.respond_info("Lister update completed successfully")
                 
