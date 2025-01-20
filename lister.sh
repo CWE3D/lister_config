@@ -721,6 +721,8 @@ main() {
     
     case "$MODE" in
         "install")
+            # Clear log file at the start of install
+            > "$LOG_FILE"
             log_message "INFO" "Starting installation process..." "INSTALL"
             
             # System setup
@@ -774,6 +776,8 @@ main() {
             exit 0
             ;;
         "update")
+            # Clear log file at the start of update
+            > "$LOG_FILE"
             log_message "INFO" "Starting update process..." "INSTALL"
             
             # Initialize and update repository
