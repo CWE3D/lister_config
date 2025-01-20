@@ -40,6 +40,9 @@ declare -A SERVICE_STATUS
 PRINTABLES_SCRIPTS_DIR="${PRINTABLES_DIR}/scripts"
 UPDATE_CLIENT_SCRIPT="${PRINTABLES_SCRIPTS_DIR}/update_client.py"
 
+# At the top with other path definitions, add:
+LISTER_UPDATE_SERVICE_FILE="${LISTER_CONFIG_DIR}/extras/lister_update_service.service"
+
 # Function to verify printables setup
 verify_printables_setup() {
     log_message "INFO" "Verifying printables setup..." "INSTALL"
@@ -300,6 +303,18 @@ setup_services() {
     
     # Create service symlinks
     log_message "INFO" "Creating service symlinks..." "INSTALL"
+    
+    # Check if service files exist before creating symlinks
+    if [ ! -f "$LISTER_UPDATE_SERVICE_FILE" ]; then
+        log_message "ERROR" "Lister update service file not found at: $LISTER_UPDATE_SERVICE_FILE" "INSTALL"
+        return 1
+    }
+    
+    if [ ! -f "$SERVICE_FILE" ]; then
+        log_message "ERROR" "Numpad service file not found at: $SERVICE_FILE" "INSTALL"
+        return 1
+    }
+    
     ln -sf "$LISTER_UPDATE_SERVICE_FILE" "/etc/systemd/system/lister_update_service.service"
     ln -sf "$SERVICE_FILE" "/etc/systemd/system/numpad_event_service.service"
     
