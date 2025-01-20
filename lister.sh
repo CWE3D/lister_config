@@ -308,12 +308,12 @@ setup_services() {
     if [ ! -f "$LISTER_UPDATE_SERVICE_FILE" ]; then
         log_message "ERROR" "Lister update service file not found at: $LISTER_UPDATE_SERVICE_FILE" "INSTALL"
         return 1
-    }
+    fi
     
     if [ ! -f "$SERVICE_FILE" ]; then
         log_message "ERROR" "Numpad service file not found at: $SERVICE_FILE" "INSTALL"
         return 1
-    }
+    fi
     
     ln -sf "$LISTER_UPDATE_SERVICE_FILE" "/etc/systemd/system/lister_update_service.service"
     ln -sf "$SERVICE_FILE" "/etc/systemd/system/numpad_event_service.service"
