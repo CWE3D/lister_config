@@ -6,17 +6,24 @@
 
 import logging
 import subprocess
+import os
 
 class ListerUpdate:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.gcode = self.printer.lookup_object('gcode')
+        self.log_file = "/home/pi/printer_data/logs/lister_update_service.log"
         
         # Register commands
         self.gcode.register_command(
             'UPDATE_LISTER', 
             self.cmd_UPDATE_LISTER,
             desc=self.cmd_UPDATE_LISTER.__doc__
+        )
+        self.gcode.register_command(
+            'UPDATE_LOGS',
+            self.cmd_UPDATE_LOGS,
+            desc=self.cmd_UPDATE_LOGS.__doc__
         )
 
     def cmd_UPDATE_LISTER(self, gcmd):
@@ -63,6 +70,32 @@ class ListerUpdate:
         except Exception as e:
             logging.exception("Error during Lister update")
             raise gcmd.error(f"Lister update failed: {str(e)}")
+
+    def cmd_UPDATE_LOGS(self, gcmd):
+        """Display the last Lister update logs"""
+        try:
+            if not os.path.exists(self.log_file):
+                raise gcmd.error(f"Log file not found: {self.log_file}")
+            
+            # Read the last 50 lines of the log file
+            try:
+                with open(self.log_file, 'r') as f:
+                    # Read all lines and get the last 50
+                    lines = f.readlines()
+                    last_lines = lines[-50:] if len(lines) > 50 else lines
+                    
+                    # Format the output
+                    log_content = ''.join(last_lines).strip()
+                    if log_content:
+                        gcmd.respond_info(f"Last update logs:\n{log_content}")
+                    else:
+                        gcmd.respond_info("Log file is empty")
+            except Exception as e:
+                raise gcmd.error(f"Error reading log file: {str(e)}")
+                
+        except Exception as e:
+            logging.exception("Error retrieving update logs")
+            raise gcmd.error(f"Failed to get update logs: {str(e)}")
 
     def _restart_klipper(self, gcmd):
         """Restart Klipper"""
