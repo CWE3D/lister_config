@@ -638,7 +638,7 @@ init_git_repository() {
 update_repo() {
     log_message "INFO" "Checking for repository updates..." "INSTALL"
     
-    # Run git commands as pi user
+    # Run git commands as pi user with better LFS handling
     su - pi -c "cd \"$LISTER_CONFIG_DIR\" && \
         git fetch && \
         LOCAL=\$(git rev-parse HEAD) && \
@@ -647,9 +647,9 @@ update_repo() {
             echo 'Updates available, pulling changes...' && \
             git reset --hard && \
             git clean -fd && \
+            git lfs fetch && \
             git pull --force origin main && \
-            git lfs install && \
-            git lfs fetch --all && \
+            git lfs pull && \
             git lfs checkout; \
         else \
             echo 'Repository is already up-to-date.'; \
