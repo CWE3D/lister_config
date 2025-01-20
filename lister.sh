@@ -622,6 +622,45 @@ init_git_repository() {
     return 0
 }
 
+# Function to update repository with LFS support
+update_repo() {
+    log_message "INFO" "Checking for repository updates..." "INSTALL"
+    
+    cd "$LISTER_CONFIG_DIR" || {
+        log_message "ERROR" "Failed to change to repository directory" "INSTALL"
+        return 1
+    }
+    
+    # Fetch latest changes
+    git fetch
+    
+    # Compare local and remote commit hashes
+    LOCAL=$(git rev-parse HEAD)
+    REMOTE=$(git rev-parse @{u})
+    
+    if [ "$LOCAL" != "$REMOTE" ]; then
+        log_message "INFO" "New updates available. Pulling changes..." "INSTALL"
+        
+        # Reset any local changes (including file modes)
+        git reset --hard
+        git clean -fd
+        
+        # Pull changes
+        git pull --force origin main
+        
+        # Setup and fetch LFS files
+        git lfs install
+        git lfs fetch --all
+        git lfs checkout
+        
+        log_message "INFO" "Repository update completed" "INSTALL"
+    else
+        log_message "INFO" "Repository is already up-to-date." "INSTALL"
+    fi
+    
+    return 0
+}
+
 # Function to verify numpad setup
 verify_numpad_setup() {
     log_message "INFO" "Verifying numpad setup..." "INSTALL"
@@ -738,10 +777,6 @@ main() {
             log_message "INFO" "Starting update process..." "INSTALL"
             
             # Initialize and update repository
-            init_git_repository || {
-                log_message "ERROR" "Git repository initialization failed" "INSTALL"
-                exit 1
-            }
             update_repo || {
                 log_message "ERROR" "Failed to update repository" "INSTALL"
                 exit 1
