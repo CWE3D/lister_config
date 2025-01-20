@@ -5,7 +5,6 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 import logging
-import os
 import subprocess
 
 class ListerUpdate:
@@ -21,19 +20,11 @@ class ListerUpdate:
         )
 
     def cmd_UPDATE_LISTER(self, gcmd):
-        """Update Lister configuration: UPDATE_LISTER MODE=refresh
-        Modes: install, refresh, sync, restart, permissions"""
-        mode = gcmd.get('MODE', 'refresh').lower()
-        
-        # Validate mode
-        valid_modes = ['install', 'refresh', 'sync', 'restart', 'permissions']
-        if mode not in valid_modes:
-            raise gcmd.error(f"Invalid mode: {mode}. Must be one of: {', '.join(valid_modes)}")
-        
+        """Update Lister configuration"""
         try:
             # Call the service through systemctl
             process = subprocess.Popen(
-                ['sudo', 'systemctl', 'start', '--no-block', f'lister_update_service@{mode}'],
+                ['systemctl', 'start', 'lister_update_service'],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
@@ -44,7 +35,7 @@ class ListerUpdate:
                 
                 # Check service status
                 status_proc = subprocess.run(
-                    ['systemctl', 'is-active', f'lister_update_service@{mode}'],
+                    ['systemctl', 'is-active', 'lister_update_service'],
                     capture_output=True,
                     text=True
                 )
@@ -52,7 +43,7 @@ class ListerUpdate:
                 if status_proc.returncode != 0:
                     # Get service logs if failed
                     log_proc = subprocess.run(
-                        ['journalctl', '-u', f'lister_update_service@{mode}', '-n', '50', '--no-pager'],
+                        ['journalctl', '-u', 'lister_update_service', '-n', '50', '--no-pager'],
                         capture_output=True,
                         text=True
                     )
@@ -60,13 +51,10 @@ class ListerUpdate:
                         f"Lister update failed. Service logs:\n{log_proc.stdout}"
                     )
                 
-                # Restart Klipper if needed
-                if mode in ['install', 'refresh', 'sync']:
-                    self._restart_klipper(gcmd)
+                # Restart Klipper
+                self._restart_klipper(gcmd)
                 
-                gcmd.respond_info(
-                    f"Lister update ({mode}) completed successfully"
-                )
+                gcmd.respond_info("Lister update completed successfully")
                 
             except subprocess.TimeoutExpired:
                 process.kill()

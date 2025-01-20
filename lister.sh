@@ -245,7 +245,6 @@ setup_services() {
     
     # Enable and start services
     systemctl enable numpad_event_service.service
-    systemctl enable lister_update_service@.service  # Enable the template service
     
     systemctl start numpad_event_service.service
     
@@ -707,9 +706,9 @@ verify_lister_update_setup() {
         return 1
     fi
     
-    # Verify service is installed and enabled in systemd
-    if ! systemctl is-enabled --quiet lister_update_service@.service; then
-        log_message "ERROR" "Lister update service template not enabled" "INSTALL"
+    # Verify service is installed in systemd
+    if ! systemctl list-unit-files | grep -q "lister_update_service@.service"; then
+        log_message "ERROR" "Lister update service not properly installed" "INSTALL"
         return 1
     fi
     

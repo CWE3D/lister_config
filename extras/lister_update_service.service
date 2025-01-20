@@ -1,11 +1,11 @@
 [Unit]
-Description=Lister Update Service %I
+Description=Lister Update Service
 After=network.target
 
 [Service]
 Type=oneshot
 User=root
-ExecStart=/usr/bin/python3 /home/pi/lister_config/extras/lister_update_service.py %i
+ExecStart=/home/pi/lister_config/lister.sh refresh
 RemainAfterExit=no
 Environment=PYTHONUNBUFFERED=1
 
